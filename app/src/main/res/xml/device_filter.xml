@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- STM32 USB VID/PID (CDC ACM) -->
+    <usb-device vendor-id="1155" product-id="22336" />
+    <!-- Raspberry Pi Pico CDC -->
+    <usb-device vendor-id="11914" product-id="5" />
+</resources>

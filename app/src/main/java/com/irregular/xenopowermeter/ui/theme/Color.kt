@@ -22,6 +22,8 @@ private val LightGridColor = Color(0xFF2A2A3E)
 private val LightAxisLabelColor = Color(0xFFBBBBBB)
 private val LightVersionColor = Color(0xFF999999)
 private val LightLinkColor = Color(0xFF009FAA)
+private val LightSettingsButtonColor = Color(0xFF2A8A90)
+private val LightSettingsButtonTextColor = Color(0xFF010F10)
 
 // Dark theme colors
 private val DarkBarColor = Color(0xFF1A3A3C)
@@ -35,6 +37,8 @@ private val DarkGridColor = Color(0xFF1A1A2E)
 private val DarkAxisLabelColor = Color(0xFF888888)
 private val DarkVersionColor = Color(0xFF666666)
 private val DarkLinkColor = Color(0xFF4DD0E1)
+private val DarkSettingsButtonColor = Color(0xFF2A6A6E)
+private val DarkSettingsButtonTextColor = Color(0xFFE0F5F7)
 
 object AppColors {
     @Composable
@@ -69,4 +73,10 @@ object AppColors {
 
     @Composable
     fun linkColor() = if (isSystemInDarkTheme()) DarkLinkColor else LightLinkColor
+
+    @Composable
+    fun settingsButtonColor() = if (isSystemInDarkTheme()) DarkSettingsButtonColor else LightSettingsButtonColor
+
+    @Composable
+    fun settingsButtonTextColor() = if (isSystemInDarkTheme()) DarkSettingsButtonTextColor else LightSettingsButtonTextColor
 }

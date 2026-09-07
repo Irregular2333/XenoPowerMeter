@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(viewModel: WaveformViewModel) {
     val cardTextColor = AppColors.buttonTextColor()
     val cardColor = AppColors.cardColor()
+    val settingsButtonColor = AppColors.settingsButtonColor()
+    val settingsButtonTextColor = AppColors.settingsButtonTextColor()
     val calibration by viewModel.calibration.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val context = LocalContext.current
@@ -101,24 +103,36 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
+                        Button(
                             onClick = { saveBinLauncher.launch("xenopower_recording.bin") },
                             modifier = Modifier.weight(1f),
-                            enabled = recorder.getEntryCount() > 0
+                            enabled = recorder.getEntryCount() > 0,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = settingsButtonColor,
+                                contentColor = settingsButtonTextColor,
+                                disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                                disabledContentColor = settingsButtonTextColor.copy(alpha = 0.38f)
+                            )
                         ) {
                             Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Export .bin", color = cardTextColor)
+                            Text("Export .bin")
                         }
 
-                        OutlinedButton(
+                        Button(
                             onClick = { saveCsvLauncher.launch("xenopower_recording.csv") },
                             modifier = Modifier.weight(1f),
-                            enabled = recorder.getEntryCount() > 0
+                            enabled = recorder.getEntryCount() > 0,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = settingsButtonColor,
+                                contentColor = settingsButtonTextColor,
+                                disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                                disabledContentColor = settingsButtonTextColor.copy(alpha = 0.38f)
+                            )
                         ) {
                             Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Export .csv", color = cardTextColor)
+                            Text("Export .csv")
                         }
                     }
                 }
@@ -151,17 +165,23 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
+                        Button(
                             onClick = { viewModel.loadCalibration() },
                             enabled = isConnected,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = settingsButtonColor,
+                                contentColor = settingsButtonTextColor,
+                                disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                                disabledContentColor = settingsButtonTextColor.copy(alpha = 0.38f)
+                            )
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Read", color = cardTextColor)
+                            Text("Read")
                         }
 
-                        OutlinedButton(
+                        Button(
                             onClick = {
                                 scope.launch(Dispatchers.IO) {
                                     viewModel.usbManager.resetCalibration()
@@ -169,17 +189,23 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                                 }
                             },
                             enabled = isConnected,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = settingsButtonColor,
+                                contentColor = settingsButtonTextColor,
+                                disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                                disabledContentColor = settingsButtonTextColor.copy(alpha = 0.38f)
+                            )
                         ) {
                             Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Reset", color = cardTextColor)
+                            Text("Reset")
                         }
                     }
                 }
             }
         }
-        
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)

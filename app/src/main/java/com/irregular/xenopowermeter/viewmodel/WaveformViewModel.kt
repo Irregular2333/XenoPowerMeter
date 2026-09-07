@@ -11,9 +11,11 @@ import com.irregular.xenopowermeter.data.usb.UsbCdcManager
 import com.irregular.xenopowermeter.notification.IslandHelper
 import com.irregular.xenopowermeter.recording.Recorder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
@@ -33,6 +35,9 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
 
     private val _connectionStatus = MutableStateFlow("Disconnected")
     val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
+
+    private val _connectionEvents = Channel<String>(Channel.BUFFERED)
+    val connectionEvents = _connectionEvents.receiveAsFlow()
 
     private val _currentVoltage = MutableStateFlow(0f)
     val currentVoltage: StateFlow<Float> = _currentVoltage.asStateFlow()
@@ -71,14 +76,23 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     private var validPowerSum = 0.0
     private var validPowerCount = 0L
 
-    private val _visibleTimeMs = MutableStateFlow(8000L)
+    private val _visibleTimeMs = MutableStateFlow(5000L)
     val visibleTimeMs: StateFlow<Long> = _visibleTimeMs.asStateFlow()
+
+    private var isLandscape = false
 
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
     fun togglePause() {
         _isPaused.value = !_isPaused.value
+    }
+
+    fun setOrientation(landscape: Boolean) {
+        if (isLandscape != landscape) {
+            isLandscape = landscape
+            _visibleTimeMs.value = if (landscape) 8000L else 5000L
+        }
     }
 
     fun updateVisibleTimeMs(ms: Long) {
@@ -138,6 +152,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             viewModelScope.launch(Dispatchers.Main) {
                 _isConnected.value = true
                 _connectionStatus.value = "Connected"
+                _connectionEvents.send("Connected")
             }
             loadCalibration()
             loadRange()
@@ -150,6 +165,12 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                 waveBuffer.clear()
                 _waveformData.value = emptyList()
                 resetStats()
+            }
+        }
+
+        usbManager.onError = { message ->
+            viewModelScope.launch(Dispatchers.Main) {
+                _connectionEvents.send(message)
             }
         }
 
@@ -259,6 +280,9 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             usbManager.requestPermission(device)
         } else {
             _connectionStatus.value = "No device found"
+            viewModelScope.launch(Dispatchers.Main) {
+                _connectionEvents.send("No device found")
+            }
         }
     }
 
@@ -269,6 +293,9 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         waveBuffer.clear()
         _waveformData.value = emptyList()
         resetStats()
+        viewModelScope.launch(Dispatchers.Main) {
+            _connectionEvents.send("Disconnected")
+        }
     }
 
     fun loadCalibration() {

@@ -34,6 +34,7 @@ class UsbCdcManager(private val context: Context) {
     var onConnected: (() -> Unit)? = null
     var onDisconnected: (() -> Unit)? = null
     var onPacketReceived: ((ByteArray) -> Unit)? = null
+    var onError: ((String) -> Unit)? = null
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
@@ -53,6 +54,7 @@ class UsbCdcManager(private val context: Context) {
                             }
                         } else {
                             Log.w(TAG, "USB permission denied")
+                            onError?.invoke("USB permission denied")
                         }
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -124,12 +126,14 @@ class UsbCdcManager(private val context: Context) {
             val driver = CdcAcmSerialDriver(device)
             if (driver.ports.isEmpty()) {
                 Log.e(TAG, "No ports on CDC device")
+                onError?.invoke("No serial port found")
                 return
             }
 
             val connection = usbManager.openDevice(device)
             if (connection == null) {
                 Log.e(TAG, "Failed to open USB device")
+                onError?.invoke("Failed to open USB device")
                 return
             }
 
@@ -147,6 +151,7 @@ class UsbCdcManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "connectToDevice failed", e)
             isConnected = false
+            onError?.invoke("Connection failed: ${e.message}")
         }
     }
 
@@ -165,6 +170,7 @@ class UsbCdcManager(private val context: Context) {
                     Log.e(TAG, "Read error", e)
                     if (isConnected) {
                         withContext(Dispatchers.Main) {
+                            onError?.invoke("Read error: ${e.message}")
                             disconnect()
                             onDisconnected?.invoke()
                         }

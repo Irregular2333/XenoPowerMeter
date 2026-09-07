@@ -93,7 +93,8 @@ fun XenoPowerApp() {
             modifier = Modifier
                 .fillMaxSize()
                 .layerBackdrop(backdrop)
-                .padding(bottom = bottomBarHeight + 28.dp),
+                .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Bottom))
+                .padding(bottom = bottomBarHeight + 4.dp),
             enterTransition = {
                 val initialIndex = bottomNavItems.indexOfFirst { it.route == initialState.destination.route }
                 val targetIndex = bottomNavItems.indexOfFirst { it.route == targetState.destination.route }

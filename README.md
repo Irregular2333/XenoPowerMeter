@@ -17,24 +17,23 @@
 - 校准设备的部分参数
 - 适配Hyper OS超级岛
 
-
-## 目前已知问题
-- 本软件的UI适配较差
-- 暂未适配Google Live Updates
-- 以上两条后面考虑修复
-
 ## 应用界面预览
-| <div align="center">主页</div> | <div align="center">设置</div> | <div align="center">关于</div> |
-|----------|----------|----------|
-| ![主页](./screenshots/Monitor.jpg) | ![设置](./screenshots/Settings.jpg) | ![关于](./screenshots/About.jpg) |
 
+| <div align="center">平板-主页</div> | <div align="center">手机-主页</div> |
+|----------|----------|
+| <img src="./screenshots/Monitor.jpg" height="500"> | <img src="./screenshots/Monitor_Phone.jpg" height="500"> |
+| <div align="center">平板-设置</div> | <div align="center">手机-设置</div> |
+| <img src="./screenshots/Settings.jpg" height="500"> | <img src="./screenshots/Settings_Phone.jpg" height="500"> |
+| <div align="center">平板-关于</div> | <div align="center">手机-关于</div> |
+| <img src="./screenshots/About.jpg" height="500"> | <img src="./screenshots/About_Phone.jpg" height="500"> |
 
 ## 超级岛适配预览
-| <div align="center">桌面</div> | <div align="center">桌面展开大卡片</div> | 
+
+| <div align="center">桌面</div> | <div align="center">桌面展开大卡片</div> |
 |----------|----------|
-| ![桌面](./screenshots/HyperIsland_Desktop.png) | ![桌面展开大卡片](./screenshots/HyperIsland_Desktop_Expand.png) | 
-| <div align="center"><strong>通知中心卡片</strong></div> | <div align="center"><strong>锁屏卡片</strong></div> | 
-| ![通知中心卡片](./screenshots/HyperIsland_Notification_Center.jpg) | ![锁屏卡片](./screenshots/HyperIsland_Lockscreen.jpg) | 
+| <img src="./screenshots/HyperIsland_Desktop.png" height="500"> | <img src="./screenshots/HyperIsland_Desktop_Expand.png" height="500"> |
+| <div align="center"><strong>通知中心卡片</strong></div> | <div align="center"><strong>锁屏卡片</strong></div> |
+| <img src="./screenshots/HyperIsland_Notification_Center.jpg" height="500"> | <img src="./screenshots/HyperIsland_Lockscreen.jpg" height="500"> |
 
 ## 项目结构
 
@@ -48,8 +47,6 @@ app/src/main/java/com/irregular/xenopowermeter/
 │   │   └── SettingsScreen.kt           // 设置页
 │   ├── about/
 │   │   └── AboutScreen.kt              // 关于页 
-│   ├── connection/
-│   │   └── ConnectionScreen.kt         // 设备连接页(已弃用)
 │   ├── navigation/
 │   │   └── Navigation.kt               // 导航栏相关
 │   └── theme/

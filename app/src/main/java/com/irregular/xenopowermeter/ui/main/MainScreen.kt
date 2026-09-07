@@ -15,8 +15,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irregular.xenopowermeter.data.converter.DataConverter
@@ -40,25 +46,47 @@ fun MainScreen(viewModel: WaveformViewModel) {
     val waveformData by viewModel.waveformData.collectAsState()
     val visibleTimeMs by viewModel.visibleTimeMs.collectAsState()
     val range by viewModel.currentRange.collectAsState()
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val isLandscape = screenWidthDp > screenHeightDp
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp)) {
-        ValuePanel(voltage, current, avgPower)
-        Spacer(Modifier.height(4.dp))
-        ControlBar(
-            isConnected = isConnected,
-            isRecording = isRecording, isPaused = isPaused, range = range,
-            onConnect = { viewModel.connect() },
-            onDisconnect = { viewModel.disconnect() },
-            onToggleRecording = { viewModel.toggleRecording() },
-            onTogglePause = { viewModel.togglePause() },
-            onClear = { viewModel.clearWaveform() },
-            onRangeChange = { viewModel.setRange(it) }
-        )
-        Spacer(Modifier.height(4.dp))
-        WaveformChart(
-            data = waveformData,
-            visibleTimeMs = visibleTimeMs,
-            modifier = Modifier.fillMaxWidth().weight(1f)
+    LaunchedEffect(isLandscape) {
+        viewModel.setOrientation(isLandscape)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.connectionEvents.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)) {
+            ValuePanel(voltage, current, avgPower)
+            Spacer(Modifier.height(4.dp))
+            ControlBar(
+                isConnected = isConnected,
+                isRecording = isRecording, isPaused = isPaused, range = range,
+                isLandscape = isLandscape,
+                onConnect = { viewModel.connect() },
+                onDisconnect = { viewModel.disconnect() },
+                onToggleRecording = { viewModel.toggleRecording() },
+                onTogglePause = { viewModel.togglePause() },
+                onClear = { viewModel.clearWaveform() },
+                onRangeChange = { viewModel.setRange(it) }
+            )
+            Spacer(Modifier.height(4.dp))
+            WaveformChart(
+                data = waveformData,
+                visibleTimeMs = visibleTimeMs,
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
         )
     }
 }
@@ -69,6 +97,7 @@ fun ControlBar(
     isRecording: Boolean,
     isPaused: Boolean,
     range: RangeMode,
+    isLandscape: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onToggleRecording: () -> Unit,
@@ -80,50 +109,91 @@ fun ControlBar(
     val barColor = AppColors.barColor()
     val buttonTextColor = AppColors.buttonTextColor()
     val connectButtonColor = AppColors.connectButtonColor()
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+
+    @Composable
+    fun ConnectButton() {
         FilledTonalButton(
             onClick = { if (isConnected) onDisconnect() else onConnect() },
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = connectButtonColor)
         ) {
             val icon = if (isConnected) Icons.Default.LinkOff else Icons.Default.Usb
-            Icon(icon, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(if (isConnected) "Disconnect" else "Connect", color = buttonTextColor)
+            Icon(icon, null, Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            Text(if (isConnected) "Disconnect" else "Connect", fontSize = 13.sp, color = buttonTextColor)
         }
+    }
 
+    @Composable
+    fun RecordButton() {
         FilledTonalButton(
             onClick = onToggleRecording, enabled = isConnected,
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
         ) {
-            Icon(if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(if (isRecording) "Stop" else "Record", color = buttonTextColor)
+            Icon(if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord, null, Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            Text(if (isRecording) "Stop" else "Record", fontSize = 13.sp, color = buttonTextColor)
         }
+    }
+
+    @Composable
+    fun PauseButton() {
         FilledTonalButton(
             onClick = onTogglePause, enabled = isConnected,
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
         ) {
-            Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(if (isPaused) "Resume" else "Pause", color = buttonTextColor)
+            Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            Text(if (isPaused) "Resume" else "Pause", fontSize = 13.sp, color = buttonTextColor)
         }
+    }
+
+    @Composable
+    fun ClearButton() {
         FilledTonalButton(
             onClick = onClear, enabled = !isRecording,
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
         ) {
-            Icon(Icons.Default.Clear, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Clear", color = buttonTextColor)
+            Icon(Icons.Default.Clear, null, Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            Text("Clear", fontSize = 13.sp, color = buttonTextColor)
         }
+    }
+
+    @Composable
+    fun RangeButton() {
         Box {
             FilledTonalButton(
                 onClick = { rangeMenuExpanded = true }, enabled = !isRecording,
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
             ) {
-                Text("Range: ${range.name}", color = buttonTextColor)
+                Text("Range", fontSize = 13.sp, color = buttonTextColor)
             }
             DropdownMenu(expanded = rangeMenuExpanded, onDismissRequest = { rangeMenuExpanded = false }) {
                 RangeMode.entries.forEach { mode ->
                     DropdownMenuItem(text = { Text(mode.name) }, onClick = { onRangeChange(mode); rangeMenuExpanded = false })
                 }
+            }
+        }
+    }
+
+    if (isLandscape) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            ConnectButton(); RecordButton(); PauseButton(); ClearButton(); RangeButton()
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ConnectButton(); RecordButton()
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PauseButton(); ClearButton(); RangeButton()
             }
         }
     }
@@ -134,34 +204,107 @@ fun ValuePanel(voltage: Float, current: Float, avgPower: Float) {
     val cardColor = AppColors.cardColor()
     val labelColor = AppColors.labelColor()
     val dividerColor = AppColors.dividerColor()
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val isLandscape = screenWidthDp > screenHeightDp
+    val valueFontSize = when {
+        isLandscape -> 20.sp
+        screenWidthDp < 360 -> 13.sp
+        else -> 15.sp
+    }
+    val labelFontSize = when {
+        isLandscape -> 12.sp
+        screenWidthDp < 360 -> 8.sp
+        else -> 9.sp
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("VOLTAGE", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                Text(DataConverter.formatVoltage(voltage), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = VoltageColor)
+                Text("VOLTAGE", fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                if (isLandscape) {
+                    Text(DataConverter.formatVoltage(voltage), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = VoltageColor, textAlign = TextAlign.Center)
+                } else {
+                    AutoSizeText(DataConverter.formatVoltage(voltage), maxFontSize = valueFontSize, minFontSize = 8.sp, color = VoltageColor)
+                }
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
+            Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("CURRENT", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                Text(DataConverter.formatCurrent(current), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = CurrentColor)
+                Text("CURRENT", fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                if (isLandscape) {
+                    Text(DataConverter.formatCurrent(current), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = CurrentColor, textAlign = TextAlign.Center)
+                } else {
+                    AutoSizeText(DataConverter.formatCurrent(current), maxFontSize = valueFontSize, minFontSize = 8.sp, color = CurrentColor)
+                }
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
+            Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("POWER", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                Text(DataConverter.formatPower(voltage * current / 1_000_000f), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = PowerColor)
+                Text("POWER", fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                if (isLandscape) {
+                    Text(DataConverter.formatPower(voltage * current / 1_000_000f), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = PowerColor, textAlign = TextAlign.Center)
+                } else {
+                    AutoSizeText(DataConverter.formatPower(voltage * current / 1_000_000f), maxFontSize = valueFontSize, minFontSize = 8.sp, color = PowerColor)
+                }
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
+            Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("AVG POWER", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                Text(DataConverter.formatPower(avgPower), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = AvgPowerColor)
+                Text("AVG P", fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                if (isLandscape) {
+                    Text(DataConverter.formatPower(avgPower), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = AvgPowerColor, textAlign = TextAlign.Center)
+                } else {
+                    AutoSizeText(DataConverter.formatPower(avgPower), maxFontSize = valueFontSize, minFontSize = 8.sp, color = AvgPowerColor)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun AutoSizeText(
+    text: String,
+    maxFontSize: TextUnit,
+    minFontSize: TextUnit,
+    color: Color,
+    fontWeight: FontWeight = FontWeight.Bold,
+    fontFamily: FontFamily = FontFamily.Monospace
+) {
+    SubcomposeLayout { constraints ->
+        var currentSize = maxFontSize
+        val unconstrained = constraints.copy(maxWidth = Int.MAX_VALUE)
+
+        while (currentSize > minFontSize) {
+            val testStyle = TextStyle(
+                fontSize = currentSize,
+                fontWeight = fontWeight,
+                fontFamily = fontFamily,
+                color = color,
+                textAlign = TextAlign.Center
+            )
+            val measured = subcompose("measure_$currentSize") {
+                Text(text = text, style = testStyle, maxLines = 1)
+            }.first().measure(unconstrained)
+            if (measured.width <= constraints.maxWidth) break
+            currentSize = TextUnit(currentSize.value - 1f, currentSize.type)
+        }
+
+        val finalStyle = TextStyle(
+            fontSize = currentSize,
+            fontWeight = fontWeight,
+            fontFamily = fontFamily,
+            color = color,
+            textAlign = TextAlign.Center
+        )
+        val placeable = subcompose("content") {
+            Text(text = text, style = finalStyle, maxLines = 1)
+        }.first().measure(constraints)
+        layout(placeable.width, placeable.height) {
+            placeable.place(0, 0)
         }
     }
 }
@@ -175,6 +318,11 @@ fun WaveformChart(
     val gridColor = AppColors.gridColor()
     val axisLabelColor = AppColors.axisLabelColor()
     val chartBg = AppColors.chartBg()
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+    val screenHeight = LocalConfiguration.current.screenHeightDp
+    val isLandscape = screenWidth > screenHeight
+    val axisTextSize = if (isLandscape) 30f else if (screenWidth < 360) 22f else 26f
+    val numTimeTicks = if (isLandscape) 8 else 5
 
     val windowEnd = if (data.isNotEmpty()) data.last().third else 0L
     val windowStart = windowEnd - visibleTimeMs
@@ -205,10 +353,10 @@ fun WaveformChart(
             modifier = Modifier.fillMaxSize()
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val leftAxisW = 120f
-                val rightAxisW = 120f
-                val topPad = 36f
-                val bottomPad = 80f
+                val leftAxisW = if (isLandscape) 120f else if (screenWidth < 360) 80f else 100f
+                val rightAxisW = if (isLandscape) 120f else if (screenWidth < 360) 80f else 100f
+                val topPad = if (isLandscape) 36f else 24f
+                val bottomPad = if (isLandscape) 80f else if (screenWidth < 360) 56f else 64f
                 val chartLeft = leftAxisW
                 val chartRight = size.width - rightAxisW
                 val chartTop = topPad
@@ -223,7 +371,7 @@ fun WaveformChart(
                 }
 
                 val vTickPaint = android.graphics.Paint().apply {
-                    color = VoltageColor.hashCode(); textSize = 30f
+                    color = VoltageColor.hashCode(); textSize = axisTextSize
                     isAntiAlias = true; isFakeBoldText = true
                     textAlign = android.graphics.Paint.Align.RIGHT
                 }
@@ -247,7 +395,7 @@ fun WaveformChart(
                 }
 
                 val iTickPaint = android.graphics.Paint().apply {
-                    color = CurrentColor.hashCode(); textSize = 30f
+                    color = CurrentColor.hashCode(); textSize = axisTextSize
                     isAntiAlias = true; isFakeBoldText = true
                     textAlign = android.graphics.Paint.Align.LEFT
                 }
@@ -271,15 +419,15 @@ fun WaveformChart(
 
                 if (data.isEmpty()) return@Canvas
 
-                val numTimeTicks = 8
+                val numTimeTicksLocal = numTimeTicks
 
                 val timePaint = android.graphics.Paint().apply {
-                    color = axisLabelColor.hashCode(); textSize = 28f
+                    color = axisLabelColor.hashCode(); textSize = axisTextSize + 2f
                     isAntiAlias = true; isFakeBoldText = true
                 }
 
-                for (i in 0..numTimeTicks) {
-                    val fraction = i.toFloat() / numTimeTicks
+                for (i in 0..numTimeTicksLocal) {
+                    val fraction = i.toFloat() / numTimeTicksLocal
                     val x = chartLeft + fraction * drawWidth
                     val timeMs = windowStart + (fraction * visibleTimeMs).toLong()
                     drawContext.canvas.nativeCanvas.drawLine(x, chartTop, x, chartBottom, gridPaint)
@@ -287,7 +435,7 @@ fun WaveformChart(
                     val min = totalSec / 60
                     val sec = totalSec % 60
                     drawContext.canvas.nativeCanvas.drawText(
-                        String.format("%d:%02ds", min, sec), x - 20f, chartBottom + 54f, timePaint
+                        String.format("%d:%02ds", min, sec), x - 20f, chartBottom + (bottomPad - 10f), timePaint
                     )
                 }
 

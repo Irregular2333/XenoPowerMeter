@@ -2,3 +2,7 @@
 <resources>
     <style name="Theme.XenoPowerMeter" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>
+
+<!-- Dark mode variant -->
+<!-- Place this in res/values-night/themes.xml -->
+<!-- <style name="Theme.XenoPowerMeter" parent="android:Theme.Material.NoActionBar" /> -->

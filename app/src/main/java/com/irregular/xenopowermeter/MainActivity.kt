@@ -42,6 +42,7 @@ import com.irregular.xenopowermeter.ui.about.AboutScreen
 import com.irregular.xenopowermeter.ui.navigation.Screen
 import com.irregular.xenopowermeter.ui.navigation.bottomNavItems
 import com.irregular.xenopowermeter.ui.settings.SettingsScreen
+import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.irregular.xenopowermeter.ui.theme.XenoPowerMeterTheme
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
 import kotlinx.coroutines.launch
@@ -125,6 +126,8 @@ fun XenoPowerApp() {
 
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
+        val bottomBarColor = AppColors.barColor()
+        val unselectedIconTint = AppColors.buttonTextColor()
 
         Row(
             modifier = Modifier
@@ -140,14 +143,14 @@ fun XenoPowerApp() {
                     effects = {
                         blur(8f.dp.toPx())
                     },
-                    onDrawSurface = { drawRect(Color(0xFFD0EEF0)) }
+                    onDrawSurface = { drawRect(bottomBarColor) }
                 ),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             bottomNavItems.forEach { screen ->
                 val selected = currentRoute == screen.route
-                val tint = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF6B9DA0)
+                val tint = if (selected) MaterialTheme.colorScheme.primary else unselectedIconTint
 
                 val animationScope = rememberCoroutineScope()
                 val progressAnimation = remember { Animatable(0f) }

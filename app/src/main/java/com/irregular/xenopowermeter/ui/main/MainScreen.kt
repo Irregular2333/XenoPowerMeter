@@ -3,7 +3,6 @@ package com.irregular.xenopowermeter.ui.main
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,13 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irregular.xenopowermeter.data.converter.DataConverter
 import com.irregular.xenopowermeter.data.model.RangeMode
+import com.irregular.xenopowermeter.ui.theme.AppColors
+import com.irregular.xenopowermeter.ui.theme.AvgPowerColor
+import com.irregular.xenopowermeter.ui.theme.CurrentColor
+import com.irregular.xenopowermeter.ui.theme.PowerColor
+import com.irregular.xenopowermeter.ui.theme.VoltageColor
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
 import kotlin.math.pow
-
-val VoltageColor = Color(0xFFFF6B6B)
-val CurrentColor = Color(0xFF00D4FF)
-val PowerColor = Color(0xFFFFCC00)
-val AvgPowerColor = Color(0xFFFB8C00)
 
 @Composable
 fun MainScreen(viewModel: WaveformViewModel) {
@@ -77,12 +76,13 @@ fun ControlBar(
     onRangeChange: (RangeMode) -> Unit
 ) {
     var rangeMenuExpanded by remember { mutableStateOf(false) }
-    val barColor = Color(0xFFD0EEF0)
-    val buttonTextColor = Color(0xFF3A7A7E)
+    val barColor = AppColors.barColor()
+    val buttonTextColor = AppColors.buttonTextColor()
+    val connectButtonColor = AppColors.connectButtonColor()
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         FilledTonalButton(
             onClick = { if (isConnected) onDisconnect() else onConnect() },
-            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF9CD8DB))
+            colors = ButtonDefaults.filledTonalButtonColors(containerColor = connectButtonColor)
         ) {
             val icon = if (isConnected) Icons.Default.LinkOff else Icons.Default.Usb
             Icon(icon, null, Modifier.size(16.dp))
@@ -130,9 +130,12 @@ fun ControlBar(
 
 @Composable
 fun ValuePanel(voltage: Float, current: Float, avgPower: Float) {
+    val cardColor = AppColors.cardColor()
+    val labelColor = AppColors.labelColor()
+    val dividerColor = AppColors.dividerColor()
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F5F6)),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
@@ -140,22 +143,22 @@ fun ValuePanel(voltage: Float, current: Float, avgPower: Float) {
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("VOLTAGE", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Medium)
+                Text("VOLTAGE", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
                 Text(DataConverter.formatVoltage(voltage), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = VoltageColor)
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(Color(0xFFE0E0E0)))
+            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("CURRENT", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Medium)
+                Text("CURRENT", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
                 Text(DataConverter.formatCurrent(current), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = CurrentColor)
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(Color(0xFFE0E0E0)))
+            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("POWER", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Medium)
+                Text("POWER", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
                 Text(DataConverter.formatPower(voltage * current / 1_000_000f), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = PowerColor)
             }
-            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(Color(0xFFE0E0E0)))
+            Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("AVG POWER", fontSize = 10.sp, color = Color(0xFF888888), fontWeight = FontWeight.Medium)
+                Text("AVG POWER", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
                 Text(DataConverter.formatPower(avgPower), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = AvgPowerColor)
             }
         }
@@ -168,9 +171,9 @@ fun WaveformChart(
     visibleTimeMs: Long,
     modifier: Modifier = Modifier
 ) {
-    val gridColor = Color(0xFF2A2A3E)
-    val axisLabelColor = Color(0xFFBBBBBB)
-    val chartBg = Color(0xFF0D0D1A)
+    val gridColor = AppColors.gridColor()
+    val axisLabelColor = AppColors.axisLabelColor()
+    val chartBg = AppColors.chartBg()
 
     val windowEnd = if (data.isNotEmpty()) data.last().third else 0L
     val windowStart = windowEnd - visibleTimeMs

@@ -12,19 +12,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.irregular.xenopowermeter.data.model.Calibration
+import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(viewModel: WaveformViewModel) {
-    val cardTextColor = Color(0xFF3A7A7E)
+    val cardTextColor = AppColors.buttonTextColor()
+    val cardColor = AppColors.cardColor()
     val calibration by viewModel.calibration.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val context = LocalContext.current
@@ -75,12 +75,13 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
             Text(
                 text = "Export Data",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F5F6))
+                colors = CardDefaults.cardColors(containerColor = cardColor)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -128,12 +129,13 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
             Text(
                 text = "Calibration",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F5F6))
+                colors = CardDefaults.cardColors(containerColor = cardColor)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     CalibrationRow("Low Scale", calibration.lowScaleMultiplier)
@@ -187,7 +189,7 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
 
 @Composable
 fun CalibrationRow(label: String, value: Float, unit: String = "") {
-    val cardTextColor = Color(0xFF3A7A7E)
+    val cardTextColor = AppColors.buttonTextColor()
     Row(
         modifier = Modifier
             .fillMaxWidth()

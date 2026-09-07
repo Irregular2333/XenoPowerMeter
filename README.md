@@ -1,7 +1,7 @@
 <h1 align="center"><img src="./app/src/main/res/drawable/app_icon.png" width="100"><br>XenoPowerMeter<br><span style="display: inline-block; margin-top: 11px;"><sub><sup>An Android app for collecting Power-Pico USB power meter data.</sup></sub></span></h1>
 
 <div align="center">
-<img src="https://img.shields.io/badge/Version-1.2.0-blue">
+<img src="https://img.shields.io/badge/Version-1.4.0-blue">
 <img src="https://img.shields.io/badge/License-Apache2.0-yellow">
 <img src="https://img.shields.io/badge/Kotlin-purple?logo=Kotlin">
 <img src="https://img.shields.io/badge/OS-Android-green">

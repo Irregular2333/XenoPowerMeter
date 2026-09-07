@@ -12,12 +12,16 @@
 ----
 
 ## 支持功能
-- 连接设备时自动打开App
 - 采集并查看电流、电压、功率等数据
 - 导入/导出数据，支持与PC端互通
 - 校准设备的部分参数
 - 适配Hyper OS超级岛
-- 本软件的UI仅适配大屏
+
+
+## 目前已知问题
+- 本软件的UI适配较差
+- 暂未适配Google Live Updates
+- 以上两条后面考虑修复
 
 ## 应用界面预览
 | <div align="center">主页</div> | <div align="center">设置</div> | <div align="center">关于</div> |
@@ -36,36 +40,37 @@
 
 ```
 app/src/main/java/com/irregular/xenopowermeter/
-├── MainActivity.kt                 
-├── ui/                             // UI相关
+├── MainActivity.kt                      
+├── ui/                                 // UI相关
 │   ├── main/
-│   │   └── MainScreen.kt           // 主界面
+│   │   └── MainScreen.kt               // 主界面
 │   ├── settings/
-│   │   └── SettingsScreen.kt       // 设置页
+│   │   └── SettingsScreen.kt           // 设置页
 │   ├── about/
-│   │   └── AboutScreen.kt          // 关于页
+│   │   └── AboutScreen.kt              // 关于页 
 │   ├── connection/
-│   │   └── ConnectionScreen.kt     // 设备连接页(已弃用)
+│   │   └── ConnectionScreen.kt         // 设备连接页(已弃用)
 │   ├── navigation/
-│   │   └── Navigation.kt           // 导航栏相关
+│   │   └── Navigation.kt               // 导航栏相关
 │   └── theme/
-│       └── Theme.kt                // Material3主题配置
-├── viewmodel/                      
-│   └── WaveformViewModel.kt        // 核心功能：数据采集/图表/录制/USB通信
-├── data/                           
+│       ├── Theme.kt                    // Material3主题配置
+│       └── Color.kt                    // 自定义颜色定义
+├── viewmodel/
+│   └── WaveformViewModel.kt            // 核心功能：数据采集/图表/录制/USB通信
+├── data/
 │   ├── model/
-│   │   ├── UsbAdcPacket.kt         // USB数据包模型
-│   │   ├── Commands.kt             // MCU通信协议指令
-│   │   └── Calibration.kt          // 校准参数模型
+│   │   ├── UsbAdcPacket.kt             // USB数据包模型
+│   │   ├── Commands.kt                 // MCU通信协议指令
+│   │   └── Calibration.kt              // 校准参数模型
 │   ├── usb/
-│   │   ├── UsbCdcManager.kt        // USB CDC虚拟串口管理
-│   │   └── ProtocolParser.kt       // 协议解析器(帧同步/校验/CRC)
+│   │   ├── UsbCdcManager.kt            // USB CDC虚拟串口管理
+│   │   └── ProtocolParser.kt           // 协议解析器(帧同步/校验/CRC)
 │   └── converter/
-│       └── DataConverter.kt        // 数据格式化(电压/电流/功率显示)
-├── recording/                      
-│   └── Recorder.kt                 // 录制管理(存储+.bin/.csv导出)
-└── notification/                   
-    └── IslandHelper.kt             // 小米Hyper OS超级岛适配
+│       └── DataConverter.kt            // 数据格式化(电压/电流/功率显示)
+├── recording/
+│   └── Recorder.kt                     // 录制管理(内存存储+.bin/.csv 导出)
+└── notification/
+    └── IslandHelper.kt                 // 小米HyperOS 超级岛适配
 ```
 
 ## 特别感谢：

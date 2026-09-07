@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -91,7 +92,7 @@ fun AboutScreen() {
                         
                         Column(modifier = Modifier.weight(1.2f), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("BUILD DATE", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                            Text("2026.09.06", fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.secondary)
+                            Text("2026.09.07", fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.secondary)
                         }
                         
                         Box(Modifier.width(1.dp).height(40.dp).align(Alignment.CenterVertically).background(dividerColor))
@@ -103,7 +104,7 @@ fun AboutScreen() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("AUTHOR", fontSize = 10.sp, color = labelColor, fontWeight = FontWeight.Medium)
-                            Text("Irregular", fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.tertiary)
+                            Text("Irregular", fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color(0xFFFB8C00))
                         }
                     }
                 }

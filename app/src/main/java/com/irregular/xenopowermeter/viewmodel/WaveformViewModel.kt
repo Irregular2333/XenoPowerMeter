@@ -1,6 +1,7 @@
 package com.irregular.xenopowermeter.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import com.irregular.xenopowermeter.data.usb.ProtocolParser
 import com.irregular.xenopowermeter.data.usb.UsbCdcManager
 import com.irregular.xenopowermeter.notification.IslandHelper
 import com.irregular.xenopowermeter.recording.Recorder
+import com.irregular.xenopowermeter.recording.RecordingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -339,11 +341,18 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun toggleRecording() {
+        val ctx = getApplication<Application>()
         if (recorder.isRecording.value) {
             recorder.stop()
-            IslandHelper.cancelNotification(getApplication())
+            IslandHelper.cancelNotification(ctx)
+            ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
+                action = RecordingService.ACTION_STOP
+            })
         } else {
             recorder.start()
+            ctx.startForegroundService(Intent(ctx, RecordingService::class.java).apply {
+                action = RecordingService.ACTION_START
+            })
         }
     }
 
@@ -355,7 +364,13 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
-        IslandHelper.cancelNotification(getApplication())
+        val ctx = getApplication<Application>()
+        IslandHelper.cancelNotification(ctx)
+        if (recorder.isRecording.value) {
+            ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
+                action = RecordingService.ACTION_STOP
+            })
+        }
         usbManager.disconnect()
     }
 

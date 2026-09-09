@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -77,6 +79,17 @@ class MainActivity : ComponentActivity() {
 fun XenoPowerApp() {
     val viewModel: WaveformViewModel = viewModel()
     val navController = rememberNavController()
+    val view = LocalView.current
+    val isRecording by viewModel.recorder.isRecording.collectAsState()
+
+    SideEffect {
+        val window = (view.context as? ComponentActivity)?.window
+        if (isRecording) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     val backgroundColor = MaterialTheme.colorScheme.background
     val backdrop = rememberLayerBackdrop {

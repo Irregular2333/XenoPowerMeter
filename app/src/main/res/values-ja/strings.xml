@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XenoPowerMeter</string>
+
+    <!-- Navigation -->
+
+    <!-- Main Screen -->
+    <string name="voltage_label">電圧</string>
+    <string name="current_label">電流</string>
+    <string name="power_label">電力</string>
+    <string name="avg_power_label">平均電力</string>
+    <string name="connect">デバイス接続</string>
+    <string name="disconnect">切断</string>
+    <string name="record">記録開始</string>
+    <string name="stop">記録停止</string>
+    <string name="clear">データ消去</string>
+    <string name="range">レンジ</string>
+
+    <!-- Settings Screen -->
+    <string name="data_record">データ記録</string>
+    <string name="record_count_label">記録データ数</string>
+    <string name="recording_value">%d 件</string>
+    <string name="record_duration_label">記録時間</string>
+    <string name="duration_value">%.2fs</string>
+    <string name="export_recorded_data">記録データをエクスポート</string>
+    <string name="export_option_bin">.bin ファイルをエクスポート</string>
+    <string name="export_option_csv">.csv ファイルをエクスポート</string>
+    <string name="export_bin_success">%1$d 件のデータを %2$s にエクスポートしました</string>
+    <string name="export_csv_success">%1$d 件のデータを %2$s にエクスポートしました</string>
+    <string name="export_dir_unknown">選択したフォルダ</string>
+    <string name="export_fail">エクスポート失敗</string>
+    <string name="calibration">レンジパラメータ読取</string>
+    <string name="calibration_low_scale">低レンジ係数</string>
+    <string name="calibration_low_offset">低レンジオフセット</string>
+    <string name="calibration_mid_scale">中レンジ係数</string>
+    <string name="calibration_mid_offset">中レンジオフセット</string>
+    <string name="calibration_high_scale">高レンジ係数</string>
+    <string name="calibration_high_offset">高レンジオフセット</string>
+    <string name="read">読取</string>
+
+    <!-- Display Settings -->
+    <string name="display">外観</string>
+    <string name="language">言語</string>
+    <string name="color_mode">カラーモード</string>
+    <string name="system_default">システムに従う</string>
+    <string name="chinese">\u4e2d\u6587</string>
+    <string name="japanese">日本語</string>
+    <string name="english">English</string>
+    <string name="always_light">ライトモード</string>
+    <string name="always_dark">ダークモード</string>
+
+    <!-- Range Mode -->
+    <string name="range_auto">自動</string>
+    <string name="range_low">低 (50\u03A9)</string>
+    <string name="range_mid">中 (0.5\u03A9)</string>
+    <string name="range_high">高 (5m\u03A9)</string>
+
+    <!-- Notification -->
+    <string name="auto_connect">デバイス自動接続</string>
+    <string name="notification_push">記録通知</string>
+    <string name="notification_enabled">通知が有効になりました</string>
+    <string name="notification_disabled">通知が無効になりました</string>
+    <string name="notification_enable_failed">通知の有効化に失敗しました</string>
+
+    <!-- Language change notifications -->
+    <string name="language_changed_to_system">システムに従うに切り替えました</string>
+    <string name="language_changed_to_chinese">中文に切り替えました</string>
+    <string name="language_changed_to_english">Englishに切り替えました</string>
+    <string name="language_changed_to_japanese">日本語に切り替えました</string>
+
+    <!-- Settings -->
+    <string name="color_mode_changed">カラーモードを切り替えました</string>
+
+    <!-- Connection events -->
+    <string name="event_connected">デバイスが接続されました</string>
+    <string name="event_disconnected">デバイスが切断されました</string>
+    <string name="event_no_device">デバイスが見つかりません</string>
+    <string name="event_permission_denied">USB権限が拒否されました</string>
+    <string name="event_open_failed">デバイスのオープンに失敗しました</string>
+    <string name="event_no_port">シリアルポートが見つかりません</string>
+    <string name="event_connect_failed">接続に失敗しました：%1$s</string>
+    <string name="event_read_error">読み取りエラー、接続が切断されました</string>
+
+    <!-- Export -->
+    <string name="export_need_pause">エクスポート前に記録を停止してください</string>
+    <string name="clear_confirm_title">データ消去</string>
+    <string name="clear_confirm_message">すべての録画データを消去してもよろしいですか？</string>
+    <string name="confirm_clear">消去を確認</string>
+    <string name="cancel">キャンセル</string>
+    <string name="close">閉じる</string>
+
+    <!-- About -->
+    <string name="about_description">Power-Picoデータ収集用Androidアプリ</string>
+    <string name="version_info">バージョン情報</string>
+    <string name="version_number">バージョン</string>
+    <string name="build_date">ビルド日</string>
+    <string name="changelog">更新履歴</string>
+    <string name="changelog_title">更新履歴</string>
+    <string name="changelog_content">- よりシンプルな新アイコンに変更\n- 通知・多言語・テーマモードのカスタマイズを追加\n- デバイス自動接続機能を追加\n- 記録データ消去時の確認ダイアログを追加\n- ダークモードの表示を改善\n- アプリの表示と大画面対応を改善\n- ボトムバーの表示を改善\n- データ記録機能の安定性とロジックを改善\n- データエクスポート機能の安定性とロジックを改善\n- アプリデータキャッシュの保持ロジックを改善\n- アプリ内の滑らかさとアプリサイズを改善\n- デバイスのキャリブレーションデータを読み取れない問題を修正</string>
+    <string name="github">GitHub</string>
+    <string name="author_label">作者</string>
+    <string name="special_thanks">スペシャルサンクス</string>
+    <string name="game">ゲーム</string>
+    <string name="game_xenoblade">XenobladeX DE NS2E</string>
+    <string name="github_power_pico">Power-Pico</string>
+    <string name="github_nexio_schedule">NexioSchedule</string>
+    <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="jrpg_thanks">大学生活を彩ったJRPGたち</string>
+    <string name="and_also">そして</string>
+    <string name="recording_channel_name">データ記録</string>
+    <string name="recording_channel_description">データを記録中</string>
+    <string name="recording_notification_text">記録中...</string>
+    <string name="island_open_app">アプリを開く</string>
+    <string name="island_channel_name">リアルタイム計測</string>
+    <string name="island_channel_description">リアルタイムの計測値を表示します</string>
+    <string name="island_status_recording">記録中</string>
+    <string name="island_status_monitoring">モニタリング中</string>
+    <string name="island_voltage_label">電圧</string>
+    <string name="island_current_label">電流</string>
+</resources>

@@ -13,12 +13,16 @@ import com.irregular.xenopowermeter.notification.IslandHelper
 import com.irregular.xenopowermeter.recording.Recorder
 import com.irregular.xenopowermeter.recording.RecordingService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import java.io.File
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -35,20 +39,20 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val _connectionStatus = MutableStateFlow("Disconnected")
-    val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
-
     private val _connectionEvents = Channel<String>(Channel.BUFFERED)
     val connectionEvents = _connectionEvents.receiveAsFlow()
+
+    private var autoConnectJob: Job? = null
+
+    /** True while a plug-in-triggered connect is in flight; its setup errors stay silent. */
+    @Volatile
+    private var autoConnectPending = false
 
     private val _currentVoltage = MutableStateFlow(0f)
     val currentVoltage: StateFlow<Float> = _currentVoltage.asStateFlow()
 
     private val _currentCurrent = MutableStateFlow(0f)
     val currentCurrent: StateFlow<Float> = _currentCurrent.asStateFlow()
-
-    private val _currentRange = MutableStateFlow(RangeMode.AUTO)
-    val currentRange: StateFlow<RangeMode> = _currentRange.asStateFlow()
 
     private val _calibration = MutableStateFlow(Calibration.DEFAULT)
     val calibration: StateFlow<Calibration> = _calibration.asStateFlow()
@@ -57,24 +61,17 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     val waveformData: StateFlow<List<Triple<Float, Float, Long>>> = _waveformData.asStateFlow()
 
     private val waveBuffer = ArrayDeque<Triple<Float, Float, Long>>(200000)
+    // Reusable scratch for the visible-window extraction (single collector thread).
+    private val windowScratch = ArrayList<Triple<Float, Float, Long>>(81920)
     private var startTimeMs = 0L
     private var lastUpdateTimeMs = 0L
     private val updateIntervalMs = 250L
     private var lastValuePanelUpdateTimeMs = 0L
     private val valuePanelUpdateIntervalMs = 1000L
 
-    private val _avgVoltage = MutableStateFlow(0f)
-    val avgVoltage: StateFlow<Float> = _avgVoltage.asStateFlow()
-
-    private val _avgCurrent = MutableStateFlow(0f)
-    val avgCurrent: StateFlow<Float> = _avgCurrent.asStateFlow()
-
     private val _averagePower = MutableStateFlow(0f)
     val averagePower: StateFlow<Float> = _averagePower.asStateFlow()
 
-    private var sumVoltage = 0.0
-    private var sumCurrent = 0.0
-    private var sampleCount = 0L
     private var validPowerSum = 0.0
     private var validPowerCount = 0L
 
@@ -83,11 +80,17 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
 
     private var isLandscape = false
 
-    private val _isPaused = MutableStateFlow(false)
-    val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+    /**
+     * False while the user is on Settings/About: waveform bookkeeping is
+     * paused (stats and recording keep running) so the 10 kHz pipeline stops
+     * competing with composition during page transitions.
+     */
+    @Volatile
+    var mainScreenVisible = true
+        private set
 
-    fun togglePause() {
-        _isPaused.value = !_isPaused.value
+    fun setMainScreenVisible(visible: Boolean) {
+        mainScreenVisible = visible
     }
 
     fun setOrientation(landscape: Boolean) {
@@ -97,15 +100,23 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateVisibleTimeMs(ms: Long) {
-        _visibleTimeMs.value = ms.coerceIn(1000L, 300000L)
-    }
-
     private fun lttbDownsample(
         data: List<Triple<Float, Float, Long>>,
         targetPoints: Int
     ): List<Triple<Float, Float, Long>> {
         if (data.size <= targetPoints || targetPoints < 3) return data
+
+        // Normalize both channels so voltage spikes survive downsampling too.
+        var vMin = Float.MAX_VALUE; var vMax = -Float.MAX_VALUE
+        var iMin = Float.MAX_VALUE; var iMax = -Float.MAX_VALUE
+        for (p in data) {
+            if (p.first < vMin) vMin = p.first
+            if (p.first > vMax) vMax = p.first
+            if (p.second < iMin) iMin = p.second
+            if (p.second > iMax) iMax = p.second
+        }
+        val vSpan = max(1e-6f, vMax - vMin)
+        val iSpan = max(1e-6f, iMax - iMin)
 
         val result = mutableListOf<Triple<Float, Float, Long>>()
         result.add(data[0])
@@ -120,18 +131,26 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             val nextRangeEnd = min(((i + 2) * bucketSize).toInt() + 1, data.size)
 
             var avgX = 0.0; var avgV = 0.0; var avgI = 0.0
-            val count = rangeEnd - rangeStart
-            for (j in rangeStart until rangeEnd) {
-                avgX += data[j].third; avgV += data[j].first; avgI += data[j].second
+            val count = nextRangeEnd - nextRangeStart
+            if (count <= 0) {
+                // Last bucket collapsed: anchor against the final sample instead.
+                val last = data.last()
+                avgX = last.third.toDouble(); avgV = last.first.toDouble(); avgI = last.second.toDouble()
+            } else {
+                for (j in nextRangeStart until nextRangeEnd) {
+                    avgX += data[j].third; avgV += data[j].first; avgI += data[j].second
+                }
+                avgX /= count; avgV /= count; avgI /= count
             }
-            avgX /= count; avgV /= count; avgI /= count
 
             var maxArea = -1.0; var maxIdx = rangeStart
-            for (j in nextRangeStart until nextRangeEnd) {
-                val area = 0.5 * kotlin.math.abs(
-                    (data[a].third - avgX) * (data[j].second - data[a].second) -
-                    (data[a].third - data[j].third) * (avgI - data[a].second)
-                )
+            for (j in rangeStart until rangeEnd) {
+                val p = data[j]
+                val areaV = abs((data[a].third - avgX) * (p.first - data[a].first) -
+                        (p.third - data[a].third) * (avgV - data[a].first)) / vSpan
+                val areaI = abs((data[a].third - avgX) * (p.second - data[a].second) -
+                        (p.third - data[a].third) * (avgI - data[a].second)) / iSpan
+                val area = areaV + areaI
                 if (area > maxArea) { maxArea = area; maxIdx = j }
             }
 
@@ -146,33 +165,38 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
-        usbManager.onPacketReceived = { data ->
-            parser.feedRawData(data)
+        clearWaveform()
+
+        usbManager.onAdcPacket = { packet ->
+            parser.feedPacket(packet)
         }
 
         usbManager.onConnected = {
+            autoConnectPending = false
             viewModelScope.launch(Dispatchers.Main) {
                 _isConnected.value = true
-                _connectionStatus.value = "Connected"
-                _connectionEvents.send("Connected")
+                _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_connected))
             }
             loadCalibration()
-            loadRange()
         }
 
         usbManager.onDisconnected = {
             viewModelScope.launch(Dispatchers.Main) {
                 _isConnected.value = false
-                _connectionStatus.value = "Disconnected"
-                waveBuffer.clear()
-                _waveformData.value = emptyList()
-                resetStats()
             }
         }
 
         usbManager.onError = { message ->
-            viewModelScope.launch(Dispatchers.Main) {
-                _connectionEvents.send(message)
+            // Auto-connect is a convenience the user never explicitly asked
+            // for, so its setup failures stay silent (e.g. a premature attempt
+            // right at plug-in). Manual connects and everything after a
+            // successful connect are always reported.
+            val suppress = autoConnectPending && !_isConnected.value
+            autoConnectPending = false
+            if (!suppress) {
+                viewModelScope.launch(Dispatchers.Main) {
+                    _connectionEvents.send(message)
+                }
             }
         }
 
@@ -183,51 +207,48 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                 if (startTimeMs == 0L) {
                     startTimeMs = System.currentTimeMillis()
                 }
+                val now = System.currentTimeMillis()
+                val elapsed = now - startTimeMs
+                val mainVisible = mainScreenVisible
 
                 for (s in samples) {
-                    val now = System.currentTimeMillis()
-                    val elapsed = now - startTimeMs
-                    waveBuffer.addLast(Triple(s.voltage, s.current, elapsed))
-                    if (waveBuffer.size > 200000) {
-                        waveBuffer.removeFirst()
-                    }
-
-                    sumVoltage += s.voltage
-                    sumCurrent += s.current
-                    sampleCount++
-
                     if (s.current != 0f && s.voltage != 0f) {
                         validPowerSum += s.voltage.toDouble() * s.current.toDouble() / 1_000_000.0
                         validPowerCount++
                     }
 
                     if (recorder.isRecording.value) {
-                        recorder.addSample(s.voltage, s.current)
+                        recorder.addSample(s.voltage, s.current, s.timestamp)
+                    }
+
+                    // Waveform bookkeeping only feeds the Main page chart; while
+                    // the user is on Settings/About nobody consumes it, and the
+                    // 10 kHz churn would fight the UI during page transitions.
+                    if (mainVisible) {
+                        waveBuffer.addLast(Triple(s.voltage, s.current, elapsed))
+                        if (waveBuffer.size > 200000) {
+                            waveBuffer.removeFirst()
+                        }
                     }
                 }
 
-                val now = System.currentTimeMillis()
-                if (now - lastUpdateTimeMs >= updateIntervalMs) {
+                if (mainVisible && now - lastUpdateTimeMs >= updateIntervalMs) {
                     lastUpdateTimeMs = now
 
-                    if (waveBuffer.isEmpty()) return@collect
+                    if (waveBuffer.isNotEmpty()) {
+                        val windowStart = waveBuffer.last().third - _visibleTimeMs.value
 
-                    if (!_isPaused.value) {
-                        val latestTime = waveBuffer.last().third
-                        val visibleMs = _visibleTimeMs.value
-                        val windowEnd = latestTime
-                        val windowStart = windowEnd - visibleMs
-
-                        val windowData = mutableListOf<Triple<Float, Float, Long>>()
-                        for (point in waveBuffer) {
-                            if (point.third >= windowStart && point.third <= windowEnd) {
-                                windowData.add(point)
-                            }
+                        // The buffer is time-ordered — walk backwards from the
+                        // tail instead of scanning all 200k entries.
+                        windowScratch.clear()
+                        for (i in waveBuffer.size - 1 downTo 0) {
+                            val point = waveBuffer[i]
+                            if (point.third < windowStart) break
+                            windowScratch.add(point)
                         }
+                        windowScratch.reverse()
 
-                        val targetPoints = 200
-                        val downsampled = lttbDownsample(windowData, targetPoints)
-                        _waveformData.value = downsampled
+                        _waveformData.value = lttbDownsample(windowScratch, 200)
                     }
                 }
 
@@ -237,15 +258,11 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                     _currentVoltage.value = last.voltage
                     _currentCurrent.value = last.current
 
-                    if (sampleCount > 0) {
-                        _avgVoltage.value = (sumVoltage / sampleCount).toFloat()
-                        _avgCurrent.value = (sumCurrent / sampleCount).toFloat()
-                    }
                     if (validPowerCount > 0) {
                         _averagePower.value = (validPowerSum / validPowerCount).toFloat()
                     }
 
-                    if (recorder.isRecording.value) {
+                    if (recorder.isRecording.value && com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
                         val ctx = getApplication<Application>()
                         IslandHelper.showLiveMeasurement(
                             context = ctx,
@@ -264,26 +281,56 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     private fun resetStats() {
         startTimeMs = 0L
         lastUpdateTimeMs = 0L
-        sumVoltage = 0.0
-        sumCurrent = 0.0
-        sampleCount = 0L
+        lastValuePanelUpdateTimeMs = 0L
         validPowerSum = 0.0
         validPowerCount = 0L
-        _avgVoltage.value = 0f
-        _avgCurrent.value = 0f
         _averagePower.value = 0f
-        _isPaused.value = false
     }
 
+    private fun appString(id: Int): String =
+        com.irregular.xenopowermeter.AppSettings.localizedContext(getApplication()).getString(id)
+
     fun connect() {
+        autoConnectPending = false
         val device = usbManager.findDevice()
         if (device != null) {
-            _connectionStatus.value = "Requesting permission..."
             usbManager.requestPermission(device)
         } else {
-            _connectionStatus.value = "No device found"
             viewModelScope.launch(Dispatchers.Main) {
-                _connectionEvents.send("No device found")
+                _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_no_device))
+            }
+        }
+    }
+
+    /**
+     * Passive variant for plug-in events. Enumeration can lag the attach
+     * intent, so poll for the device for a few seconds and swallow all setup
+     * errors — the user never explicitly asked for this attempt, so it must
+     * never nag. Gated by the auto-connect settings toggle; manual connects
+     * bypass it.
+     */
+    fun connectAuto() {
+        if (!com.irregular.xenopowermeter.AppSettings.autoConnect) return
+        if (autoConnectJob?.isActive == true) return
+        autoConnectJob = viewModelScope.launch(Dispatchers.IO) {
+            autoConnectPending = true
+            try {
+                // A manual connect is always at least a few hundred ms after
+                // plug-in; match that so the port never opens while the device
+                // is still settling.
+                delay(AUTO_CONNECT_SETTLE_MS)
+                repeat(AUTO_CONNECT_POLLS) {
+                    if (_isConnected.value) return@launch
+                    val device = usbManager.findDevice()
+                    if (device != null) {
+                        usbManager.requestPermission(device)
+                        return@launch
+                    }
+                    delay(AUTO_CONNECT_POLL_INTERVAL_MS)
+                }
+                autoConnectPending = false
+            } catch (e: Exception) {
+                autoConnectPending = false
             }
         }
     }
@@ -291,12 +338,8 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     fun disconnect() {
         usbManager.disconnect()
         _isConnected.value = false
-        _connectionStatus.value = "Disconnected"
-        waveBuffer.clear()
-        _waveformData.value = emptyList()
-        resetStats()
         viewModelScope.launch(Dispatchers.Main) {
-            _connectionEvents.send("Disconnected")
+            _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_disconnected))
         }
     }
 
@@ -314,26 +357,10 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun loadRange() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val range = usbManager.getRange()
-                if (range != null) {
-                    _currentRange.value = range.mode
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "loadRange failed", e)
-            }
-        }
-    }
-
     fun setRange(mode: RangeMode) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val result = usbManager.setRange(mode)
-                if (result != null) {
-                    _currentRange.value = result.mode
-                }
+                usbManager.setRange(mode)
             } catch (e: Exception) {
                 Log.e(TAG, "setRange failed", e)
             }
@@ -344,15 +371,28 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         val ctx = getApplication<Application>()
         if (recorder.isRecording.value) {
             recorder.stop()
-            IslandHelper.cancelNotification(ctx)
-            ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_STOP
-            })
+            if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
+                IslandHelper.cancelNotification(ctx)
+                ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
+                    action = RecordingService.ACTION_STOP
+                })
+            }
         } else {
-            recorder.start()
-            ctx.startForegroundService(Intent(ctx, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_START
-            })
+            recorder.start(File(getApplication<Application>().filesDir, "recordings"))
+            if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
+                val ctx = getApplication<Application>()
+                IslandHelper.showLiveMeasurement(
+                    context = ctx,
+                    voltage = _currentVoltage.value,
+                    current = _currentCurrent.value,
+                    power = _currentVoltage.value * _currentCurrent.value / 1_000_000f,
+                    avgPower = _averagePower.value,
+                    isRecording = true
+                )
+                ctx.startForegroundService(Intent(ctx, RecordingService::class.java).apply {
+                    action = RecordingService.ACTION_START
+                })
+            }
         }
     }
 
@@ -365,16 +405,21 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         val ctx = getApplication<Application>()
-        IslandHelper.cancelNotification(ctx)
-        if (recorder.isRecording.value) {
-            ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_STOP
-            })
+        if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
+            IslandHelper.cancelNotification(ctx)
+            if (recorder.isRecording.value) {
+                ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
+                    action = RecordingService.ACTION_STOP
+                })
+            }
         }
         usbManager.disconnect()
     }
 
     companion object {
         private const val TAG = "WaveformVM"
+        private const val AUTO_CONNECT_SETTLE_MS = 800L
+        private const val AUTO_CONNECT_POLLS = 12
+        private const val AUTO_CONNECT_POLL_INTERVAL_MS = 500L
     }
 }

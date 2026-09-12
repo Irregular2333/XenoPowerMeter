@@ -4,9 +4,9 @@ import com.irregular.xenopowermeter.data.model.Calibration
 
 object DataConverter {
 
-    private const val SCALE_LOW = 3.0f / 4096.0f / 50.0f / 50.0f * 1_000_000f
-    private const val SCALE_MID = 3.0f / 4096.0f / 50.0f / 0.5f * 1_000_000f
-    private const val SCALE_HIGH = 3.0f / 4096.0f / 50.0f / 0.005f * 1_000_000f
+    private const val SCALE_LOW = 3.0f / 4095.0f / 50.0f / 50.0f * 1_000_000f
+    private const val SCALE_MID = 3.0f / 4095.0f / 50.0f / 0.5f * 1_000_000f
+    private const val SCALE_HIGH = 3.0f / 4095.0f / 50.0f / 0.005f * 1_000_000f
 
     fun convertVoltage(volAdc: Int): Float {
         return volAdc * (3.0f / 4095.0f * 11.0f)
@@ -35,9 +35,8 @@ object DataConverter {
         val abs = kotlin.math.abs(ua)
         return when {
             abs >= 1_000_000f -> String.format("%.2f A", ua / 1_000_000f)
-            abs >= 1_000f -> String.format("%.2f A", ua / 1_000_000f)
+            abs >= 1_000f -> String.format("%.2f mA", ua / 1_000f)
             abs >= 1f -> String.format("%.2f \u03BCA", ua)
-            abs >= 0.001f -> String.format("%.2f nA", ua * 1000f)
             else -> String.format("%.2f nA", ua * 1000f)
         }
     }

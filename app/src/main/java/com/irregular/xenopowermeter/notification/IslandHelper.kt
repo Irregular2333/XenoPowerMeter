@@ -11,13 +11,10 @@ import android.os.Bundle
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.converter.DataConverter
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 object IslandHelper {
 
     private const val CHANNEL_ID = "power_meter_live"
-    private const val CHANNEL_NAME = "Power Meter Live"
     private const val NOTIFICATION_ID = 1001
 
     private var notificationManager: NotificationManager? = null
@@ -33,10 +30,9 @@ object IslandHelper {
 
     private fun loadQuotes(context: Context) {
         try {
-            val inputStream = context.assets.open("island_quotes.txt")
-            val reader = BufferedReader(InputStreamReader(inputStream))
-            quotes = reader.readLines().filter { it.isNotBlank() }
-            reader.close()
+            context.assets.open("island_quotes.txt").use { stream ->
+                quotes = stream.bufferedReader().readLines().filter { it.isNotBlank() }
+            }
         } catch (e: Exception) {
             quotes = listOf("XenoPowerMeter")
         }
@@ -52,37 +48,12 @@ object IslandHelper {
     private fun createChannel(context: Context) {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            CHANNEL_NAME,
+            context.getString(R.string.island_channel_name),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Live power measurement updates"
+            description = context.getString(R.string.island_channel_description)
         }
         notificationManager?.createNotificationChannel(channel)
-    }
-
-    fun isIslandSupported(context: Context): Boolean {
-        return try {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val method = clazz.getMethod(
-                "getBoolean",
-                String::class.java,
-                Boolean::class.javaPrimitiveType
-            )
-            method.invoke(null, "persist.sys.feature.island", false) as Boolean
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun hasFocusPermission(context: Context): Boolean {
-        return try {
-            val uri = android.net.Uri.parse("content://miui.statusbar.notification.public")
-            val extras = Bundle().apply { putString("package", context.packageName) }
-            val bundle = context.contentResolver.call(uri, "canShowFocus", null, extras)
-            bundle?.getBoolean("canShowFocus", false) ?: false
-        } catch (e: Exception) {
-            false
-        }
     }
 
     fun showLiveMeasurement(
@@ -94,6 +65,9 @@ object IslandHelper {
         isRecording: Boolean
     ) {
         val nm = notificationManager ?: return
+        // Resolve strings in the in-app locale so a hot language switch is
+        // reflected on the very next update.
+        val context = com.irregular.xenopowermeter.AppSettings.localizedContext(context)
 
         if (isRecording && recordingStartTimeMs == 0L) {
             recordingStartTimeMs = System.currentTimeMillis()
@@ -141,7 +115,7 @@ object IslandHelper {
         )
         val action = Notification.Action.Builder(
             Icon.createWithResource(context, R.drawable.app_icon),
-            "打开应用",
+            context.getString(R.string.island_open_app),
             pendingIntent
         ).build()
 
@@ -169,7 +143,11 @@ object IslandHelper {
         durationStr: String,
         isRecording: Boolean
     ): String {
-        val status = if (isRecording) "Recording" else "Monitoring"
+        val status = if (isRecording) {
+            context.getString(R.string.island_status_recording)
+        } else {
+            context.getString(R.string.island_status_monitoring)
+        }
         val now = System.currentTimeMillis()
 
         return JSONObject().apply {
@@ -195,9 +173,9 @@ object IslandHelper {
 
                 put("hintInfo", JSONObject().apply {
                     put("type", 2)
-                    put("content", "Voltage")
+                    put("content", context.getString(R.string.island_voltage_label))
                     put("title", voltageStr)
-                    put("subContent", "Current")
+                    put("subContent", context.getString(R.string.island_current_label))
                     put("subTitle", currentStr)
                     put("colorContent", "#666666")
                     put("colorContentDark", "#aaaaaa")
@@ -208,7 +186,7 @@ object IslandHelper {
                     put("colorSubTitle", "#222222")
                     put("colorSubTitleDark", "#eeeeee")
                     put("actionInfo", JSONObject().apply {
-                        put("actionTitle", "打开应用")
+                        put("actionTitle", context.getString(R.string.island_open_app))
                         put("actionIntentType", 1)
                         put("action", "miui.focus.action_open_app")
                     })

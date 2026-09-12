@@ -3,12 +3,26 @@ package com.irregular.xenopowermeter.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.irregular.xenopowermeter.AppSettings
 
-// Chart line colors - same in both themes
-val VoltageColor = Color(0xFFFF6B6B)
-val CurrentColor = Color(0xFF00D4FF)
-val PowerColor = Color(0xFFFFCC00)
-val AvgPowerColor = Color(0xFFFB8C00)
+private val isDark: Boolean @Composable
+    get() = when (AppSettings.colorMode) {
+        AppSettings.ColorMode.SYSTEM -> isSystemInDarkTheme()
+        AppSettings.ColorMode.LIGHT -> false
+        AppSettings.ColorMode.DARK -> true
+    }
+
+// Light theme chart colors
+private val LightVoltageColor = Color(0xFFFF6B6B)
+private val LightCurrentColor = Color(0xFF00D4FF)
+private val LightPowerColor = Color(0xFFFFCC00)
+private val LightAvgPowerColor = Color(0xFFFB8C00)
+
+// Dark theme chart colors (more muted/gray)
+private val DarkVoltageColor = Color(0xFFD4837A)
+private val DarkCurrentColor = Color(0xFF7AB4D4)
+private val DarkPowerColor = Color(0xFFD4C07A)
+private val DarkAvgPowerColor = Color(0xFFD49A7A)
 
 // Light theme colors
 private val LightBarColor = Color(0xFFD0EEF0)
@@ -20,7 +34,6 @@ private val LightDividerColor = Color(0xFFE0E0E0)
 private val LightChartBg = Color(0xFF0D0D1A)
 private val LightGridColor = Color(0xFF2A2A3E)
 private val LightAxisLabelColor = Color(0xFFBBBBBB)
-private val LightVersionColor = Color(0xFF999999)
 private val LightLinkColor = Color(0xFF009FAA)
 private val LightSettingsButtonColor = Color(0xFF2A8A90)
 private val LightSettingsButtonTextColor = Color(0xFF010F10)
@@ -32,51 +45,59 @@ private val DarkConnectButtonColor = Color(0xFF2A5A5C)
 private val DarkCardColor = Color(0xFF1A2E30)
 private val DarkLabelColor = Color(0xFFAAAAAA)
 private val DarkDividerColor = Color(0xFF3A3A3A)
-private val DarkChartBg = Color(0xFF0A0A12)
+private val DarkChartBg = Color(0xFF1E1E1E)
 private val DarkGridColor = Color(0xFF1A1A2E)
 private val DarkAxisLabelColor = Color(0xFF888888)
-private val DarkVersionColor = Color(0xFF666666)
 private val DarkLinkColor = Color(0xFF4DD0E1)
 private val DarkSettingsButtonColor = Color(0xFF2A6A6E)
 private val DarkSettingsButtonTextColor = Color(0xFFE0F5F7)
 
 object AppColors {
     @Composable
-    fun barColor() = if (isSystemInDarkTheme()) DarkBarColor else LightBarColor
+    fun voltageColor() = if (isDark) DarkVoltageColor else LightVoltageColor
 
     @Composable
-    fun buttonTextColor() = if (isSystemInDarkTheme()) DarkButtonTextColor else LightButtonTextColor
+    fun currentColor() = if (isDark) DarkCurrentColor else LightCurrentColor
 
     @Composable
-    fun connectButtonColor() = if (isSystemInDarkTheme()) DarkConnectButtonColor else LightConnectButtonColor
+    fun powerColor() = if (isDark) DarkPowerColor else LightPowerColor
 
     @Composable
-    fun cardColor() = if (isSystemInDarkTheme()) DarkCardColor else LightCardColor
+    fun avgPowerColor() = if (isDark) DarkAvgPowerColor else LightAvgPowerColor
 
     @Composable
-    fun labelColor() = if (isSystemInDarkTheme()) DarkLabelColor else LightLabelColor
+    fun barColor() = if (isDark) DarkBarColor else LightBarColor
 
     @Composable
-    fun dividerColor() = if (isSystemInDarkTheme()) DarkDividerColor else LightDividerColor
+    fun buttonTextColor() = if (isDark) DarkButtonTextColor else LightButtonTextColor
 
     @Composable
-    fun chartBg() = if (isSystemInDarkTheme()) DarkChartBg else LightChartBg
+    fun connectButtonColor() = if (isDark) DarkConnectButtonColor else LightConnectButtonColor
 
     @Composable
-    fun gridColor() = if (isSystemInDarkTheme()) DarkGridColor else LightGridColor
+    fun cardColor() = if (isDark) DarkCardColor else LightCardColor
 
     @Composable
-    fun axisLabelColor() = if (isSystemInDarkTheme()) DarkAxisLabelColor else LightAxisLabelColor
+    fun labelColor() = if (isDark) DarkLabelColor else LightLabelColor
 
     @Composable
-    fun versionColor() = if (isSystemInDarkTheme()) DarkVersionColor else LightVersionColor
+    fun dividerColor() = if (isDark) DarkDividerColor else LightDividerColor
 
     @Composable
-    fun linkColor() = if (isSystemInDarkTheme()) DarkLinkColor else LightLinkColor
+    fun chartBg() = if (isDark) DarkChartBg else LightChartBg
 
     @Composable
-    fun settingsButtonColor() = if (isSystemInDarkTheme()) DarkSettingsButtonColor else LightSettingsButtonColor
+    fun gridColor() = if (isDark) DarkGridColor else LightGridColor
 
     @Composable
-    fun settingsButtonTextColor() = if (isSystemInDarkTheme()) DarkSettingsButtonTextColor else LightSettingsButtonTextColor
+    fun axisLabelColor() = if (isDark) DarkAxisLabelColor else LightAxisLabelColor
+
+    @Composable
+    fun linkColor() = if (isDark) DarkLinkColor else LightLinkColor
+
+    @Composable
+    fun settingsButtonColor() = if (isDark) DarkSettingsButtonColor else LightSettingsButtonColor
+
+    @Composable
+    fun settingsButtonTextColor() = if (isDark) DarkSettingsButtonTextColor else LightSettingsButtonTextColor
 }

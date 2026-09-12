@@ -11,14 +11,20 @@ import android.os.Build
 import android.util.Log
 import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
+import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.Calibration
 import com.irregular.xenopowermeter.data.model.CmdResponse
 import com.irregular.xenopowermeter.data.model.CmdType
 import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.data.model.RangeStatus
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class UsbCdcManager(private val context: Context) {
 
@@ -26,14 +32,37 @@ class UsbCdcManager(private val context: Context) {
     private var serialPort: UsbSerialPort? = null
     private var readJob: Job? = null
     private var receiverRegistered = false
-    private var pendingDevice: UsbDevice? = null
+    private val disconnectHandled = AtomicBoolean(false)
+    private val connectInFlight = AtomicBoolean(false)
 
-    var isConnected = false
-        private set
+    private val commandMutex = Mutex()
+    private val nextSequence = AtomicInteger(1)
+    private val pendingResponses = ConcurrentHashMap<Int, PendingCommand>()
+
+    private class PendingCommand(val type: CmdType) {
+        val deferred = CompletableDeferred<CmdResponse>()
+    }
+
+    /**
+     * The only consumer of the port: read-loop bytes go through the demuxer,
+     * which routes ADC packets to onAdcPacket and completes pending command
+     * requests (matched by echoed sequence number).
+     */
+    private val demuxer = FrameDemuxer(
+        onAdcPacket = { packet -> onAdcPacket?.invoke(packet) },
+        onResponse = { type, sequence, response ->
+            val pending = pendingResponses.remove(sequence)
+            if (pending != null && pending.type == type) {
+                pending.deferred.complete(response)
+            }
+        }
+    )
+
+    private var isConnected = false
 
     var onConnected: (() -> Unit)? = null
     var onDisconnected: (() -> Unit)? = null
-    var onPacketReceived: ((ByteArray) -> Unit)? = null
+    var onAdcPacket: ((com.irregular.xenopowermeter.data.model.UsbAdcPacket) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
     private val usbReceiver = object : BroadcastReceiver() {
@@ -54,12 +83,11 @@ class UsbCdcManager(private val context: Context) {
                             }
                         } else {
                             Log.w(TAG, "USB permission denied")
-                            onError?.invoke("USB permission denied")
+                            onError?.invoke(context.getString(R.string.event_permission_denied))
                         }
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                        disconnect()
-                        onDisconnected?.invoke()
+                        handleDisconnect()
                     }
                 }
             } catch (e: Exception) {
@@ -100,7 +128,7 @@ class UsbCdcManager(private val context: Context) {
                     addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED)
+                    context.registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 } else {
                     context.registerReceiver(usbReceiver, filter)
                 }
@@ -122,130 +150,143 @@ class UsbCdcManager(private val context: Context) {
     }
 
     private suspend fun connectToDevice(device: UsbDevice) {
+        // HyperOS can deliver the attach intent / grant broadcast more than
+        // once; overlapping attempts race for the USB interface and the loser
+        // reports a bogus failure. Only one attempt may run at a time.
+        if (isConnected) return
+        if (!connectInFlight.compareAndSet(false, true)) return
         try {
-            val driver = CdcAcmSerialDriver(device)
-            if (driver.ports.isEmpty()) {
-                Log.e(TAG, "No ports on CDC device")
-                onError?.invoke("No serial port found")
-                return
+            try {
+                val driver = CdcAcmSerialDriver(device)
+                if (driver.ports.isEmpty()) {
+                    Log.e(TAG, "No ports on CDC device")
+                    onError?.invoke(context.getString(R.string.event_no_port))
+                    return
+                }
+
+                // Right after the grant dialog, openDevice can transiently
+                // return null; retry before reporting a failure.
+                var connection = usbManager.openDevice(device)
+                var attempt = 1
+                while (connection == null && attempt < OPEN_DEVICE_ATTEMPTS) {
+                    delay(OPEN_DEVICE_RETRY_MS)
+                    connection = usbManager.openDevice(device)
+                    attempt++
+                }
+                if (connection == null) {
+                    Log.e(TAG, "Failed to open USB device")
+                    onError?.invoke(context.getString(R.string.event_open_failed))
+                    return
+                }
+
+                val port = driver.ports[0]
+                port.open(connection)
+                port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                port.dtr = true
+                port.rts = true
+
+                disconnectHandled.set(false)
+                serialPort = port
+                isConnected = true
+                startReading()
+                onConnected?.invoke()
+                Log.i(TAG, "USB connected")
+            } catch (e: Exception) {
+                Log.e(TAG, "connectToDevice failed", e)
+                isConnected = false
+                onError?.invoke(context.getString(R.string.event_connect_failed, e.message ?: ""))
             }
-
-            val connection = usbManager.openDevice(device)
-            if (connection == null) {
-                Log.e(TAG, "Failed to open USB device")
-                onError?.invoke("Failed to open USB device")
-                return
-            }
-
-            val port = driver.ports[0]
-            port.open(connection)
-            port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            port.dtr = true
-            port.rts = true
-
-            serialPort = port
-            isConnected = true
-            startReading()
-            onConnected?.invoke()
-            Log.i(TAG, "USB connected")
-        } catch (e: Exception) {
-            Log.e(TAG, "connectToDevice failed", e)
-            isConnected = false
-            onError?.invoke("Connection failed: ${e.message}")
+        } finally {
+            connectInFlight.set(false)
         }
     }
 
     private fun startReading() {
         readJob = CoroutineScope(Dispatchers.IO).launch {
             val buffer = ByteArray(256)
+            var failures = 0
             while (isActive && isConnected) {
                 try {
                     val port = serialPort ?: break
                     val len = port.read(buffer, 100)
+                    failures = 0
                     if (len > 0) {
-                        val data = buffer.copyOf(len)
-                        onPacketReceived?.invoke(data)
+                        demuxer.feed(buffer.copyOf(len))
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Read error", e)
-                    if (isConnected) {
-                        withContext(Dispatchers.Main) {
-                            onError?.invoke("Read error: ${e.message}")
-                            disconnect()
-                            onDisconnected?.invoke()
-                        }
+                    if (!isConnected) break
+                    failures++
+                    if (failures >= READ_FAILURE_LIMIT) {
+                        // Raw library exception text stays in logcat — the
+                        // user-facing toast is fully localized.
+                        Log.e(TAG, "Read error", e)
+                        onError?.invoke(context.getString(R.string.event_read_error))
+                        handleDisconnect()
+                        break
                     }
-                    break
+                    // A freshly attached device can transiently fail its first
+                    // control transfers while the stack settles — retry before
+                    // tearing the connection down.
+                    delay(READ_RETRY_DELAY_MS)
                 }
             }
         }
     }
 
-    fun sendCommand(type: CmdType, payload: ByteArray? = null): CmdResponse? {
-        val port = serialPort ?: return null
+    suspend fun sendCommand(type: CmdType, payload: ByteArray? = null): CmdResponse? {
         val payloadLen = payload?.size ?: 0
-        if (payloadLen > 48) return null
+        if (payloadLen > MAX_PAYLOAD) return null
 
-        val frameLen = 10 + payloadLen
-        val frame = ByteBuffer.allocate(frameLen).order(ByteOrder.LITTLE_ENDIAN)
+        val sequence = nextSequence.getAndUpdate { if (it >= 0xFFFF) 1 else it + 1 }
+        val frame = buildFrame(type, sequence, payload)
+
+        return commandMutex.withLock {
+            val port = serialPort ?: return@withLock null
+            if (!isConnected) return@withLock null
+
+            val pending = PendingCommand(type)
+            pendingResponses[sequence] = pending
+            try {
+                port.write(frame, 1000)
+                withTimeoutOrNull(COMMAND_TIMEOUT_MS) { pending.deferred.await() }
+            } catch (e: Exception) {
+                Log.e(TAG, "sendCommand failed", e)
+                null
+            } finally {
+                pendingResponses.remove(sequence)
+            }
+        }
+    }
+
+    private fun buildFrame(type: CmdType, sequence: Int, payload: ByteArray?): ByteArray {
+        val payloadLen = payload?.size ?: 0
+        val frame = ByteBuffer.allocate(CMD_HEADER_SIZE + payloadLen + 2).order(ByteOrder.LITTLE_ENDIAN)
 
         frame.put(0xA5.toByte())
         frame.put(0x5A)
-        frame.put(1)
+        frame.put(PROTOCOL_VERSION.toByte())
         frame.put(type.code.toByte())
-        frame.putShort(0)
+        frame.putShort(sequence.toShort())
         frame.putShort(payloadLen.toShort())
         if (payload != null) {
             frame.put(payload)
         }
 
-        val crc = calculateCrc16(frame.array(), 2, 8 + payloadLen)
-        frame.putShort(crc)
+        // Firmware (user_CmdStrategy.c) CRCs offset 2, length 6 + payloadLen:
+        // version + type + sequence + length + payload, excluding the CRC field.
+        val crc = Crc16.ccittFalse(frame.array(), 2, 6 + payloadLen)
+        frame.putShort(crc.toShort())
 
-        return try {
-            port.write(frame.array(), 1000)
-            Thread.sleep(50)
-            val response = ByteArray(64)
-            val len = port.read(response, 500)
-            if (len >= 10) parseResponse(response.copyOf(len)) else null
-        } catch (e: Exception) {
-            null
-        }
+        return frame.array()
     }
 
-    private fun parseResponse(data: ByteArray): CmdResponse? {
-        if (data.size < 10) return null
-        if (data[0] != 0xA5.toByte() || data[1] != 0x5A.toByte()) return null
-
-        val payloadLen = ByteBuffer.wrap(data, 6, 2)
-            .order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
-
-        if (payloadLen + 10 > data.size) return null
-
-        val status = data[8].toInt() and 0xFF
-        val payload = if (payloadLen > 1) data.copyOfRange(9, 9 + payloadLen - 1) else ByteArray(0)
-
-        return CmdResponse(status, payload)
-    }
-
-    fun getCalibration(): Calibration? {
+    suspend fun getCalibration(): Calibration? {
         val resp = sendCommand(CmdType.CAL_GET) ?: return null
         if (resp.status != CmdResponse.STATUS_OK) return null
         return Calibration.fromByteArray(resp.payload)
     }
 
-    fun setCalibration(cal: Calibration): Boolean {
-        val resp = sendCommand(CmdType.CAL_SET, cal.toByteArray()) ?: return false
-        return resp.status == CmdResponse.STATUS_OK
-    }
-
-    fun resetCalibration(): Calibration? {
-        val resp = sendCommand(CmdType.CAL_RESET, byteArrayOf(0xC3.toByte(), 0x3C)) ?: return null
-        if (resp.status != CmdResponse.STATUS_OK) return null
-        return Calibration.fromByteArray(resp.payload)
-    }
-
-    fun getRange(): RangeStatus? {
+    suspend fun getRange(): RangeStatus? {
         val resp = sendCommand(CmdType.RANGE_GET) ?: return null
         if (resp.status != CmdResponse.STATUS_OK || resp.payload.size < 2) return null
         return RangeStatus(
@@ -254,7 +295,7 @@ class UsbCdcManager(private val context: Context) {
         )
     }
 
-    fun setRange(mode: RangeMode): RangeStatus? {
+    suspend fun setRange(mode: RangeMode): RangeStatus? {
         val resp = sendCommand(CmdType.RANGE_SET, byteArrayOf(mode.code.toByte())) ?: return null
         if (resp.status != CmdResponse.STATUS_OK || resp.payload.size < 2) return null
         return RangeStatus(
@@ -264,9 +305,17 @@ class UsbCdcManager(private val context: Context) {
     }
 
     fun disconnect() {
+        handleDisconnect()
+    }
+
+    /** Idempotent: broadcast, read-loop failure and manual disconnect all funnel here once. */
+    private fun handleDisconnect() {
+        if (!disconnectHandled.compareAndSet(false, true)) return
         isConnected = false
         readJob?.cancel()
         readJob = null
+        pendingResponses.values.forEach { it.deferred.cancel() }
+        pendingResponses.clear()
         try {
             serialPort?.close()
         } catch (_: Exception) {}
@@ -277,26 +326,20 @@ class UsbCdcManager(private val context: Context) {
             } catch (_: Exception) {}
             receiverRegistered = false
         }
-    }
-
-    private fun calculateCrc16(data: ByteArray, offset: Int, length: Int): Short {
-        var crc = 0xFFFF.toInt()
-        for (i in offset until offset + length) {
-            crc = crc xor ((data[i].toInt() and 0xFF) shl 8)
-            for (j in 0 until 8) {
-                crc = if (crc and 0x8000 != 0) {
-                    (crc shl 1) xor 0x1021
-                } else {
-                    crc shl 1
-                }
-                crc = crc and 0xFFFF
-            }
-        }
-        return crc.toShort()
+        onDisconnected?.invoke()
     }
 
     companion object {
         private const val TAG = "UsbCdcManager"
         const val ACTION_USB_PERMISSION = "com.irregular.xenopowermeter.USB_PERMISSION"
+        private const val PROTOCOL_VERSION = 1
+        // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen (CRC excluded)
+        private const val CMD_HEADER_SIZE = 10
+        private const val MAX_PAYLOAD = 48
+        private const val COMMAND_TIMEOUT_MS = 500L
+        private const val OPEN_DEVICE_ATTEMPTS = 3
+        private const val OPEN_DEVICE_RETRY_MS = 200L
+        private const val READ_FAILURE_LIMIT = 3
+        private const val READ_RETRY_DELAY_MS = 120L
     }
 }

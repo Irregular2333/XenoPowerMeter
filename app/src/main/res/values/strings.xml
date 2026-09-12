@@ -1,4 +1,120 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">XenoPowerMeter</string>
+
+    <!-- Navigation -->
+
+    <!-- Main Screen -->
+    <string name="voltage_label">VOLTAGE</string>
+    <string name="current_label">CURRENT</string>
+    <string name="power_label">POWER</string>
+    <string name="avg_power_label">AVG P</string>
+    <string name="connect">Connect Device</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="record">Start Recording</string>
+    <string name="stop">Stop Recording</string>
+    <string name="clear">Clear Data</string>
+    <string name="range">Range</string>
+
+    <!-- Settings Screen -->
+    <string name="data_record">Data Recording</string>
+    <string name="record_count_label">Recorded samples</string>
+    <string name="recording_value">%d samples</string>
+    <string name="record_duration_label">Recording duration</string>
+    <string name="duration_value">%.2fs</string>
+    <string name="export_recorded_data">Export recorded data</string>
+    <string name="export_option_bin">Export .bin file</string>
+    <string name="export_option_csv">Export .csv file</string>
+    <string name="export_bin_success">Exported %1$d records to %2$s</string>
+    <string name="export_csv_success">Exported %1$d records to %2$s</string>
+    <string name="export_dir_unknown">the selected folder</string>
+    <string name="export_fail">Export failed</string>
+    <string name="calibration">Range Parameters</string>
+    <string name="calibration_low_scale">Low Scale</string>
+    <string name="calibration_low_offset">Low Offset</string>
+    <string name="calibration_mid_scale">Mid Scale</string>
+    <string name="calibration_mid_offset">Mid Offset</string>
+    <string name="calibration_high_scale">High Scale</string>
+    <string name="calibration_high_offset">High Offset</string>
+    <string name="read">Read</string>
+
+    <!-- Display Settings -->
+    <string name="display">Appearance</string>
+    <string name="language">Language</string>
+    <string name="color_mode">Color Mode</string>
+    <string name="system_default">System Default</string>
+    <string name="chinese">\u4e2d\u6587</string>
+    <string name="english">English</string>
+    <string name="japanese">日本語</string>
+    <string name="always_light">Always Light</string>
+    <string name="always_dark">Always Dark</string>
+
+    <!-- Range Mode -->
+    <string name="range_auto">Auto</string>
+    <string name="range_low">Low (50\u03A9)</string>
+    <string name="range_mid">Mid (0.5\u03A9)</string>
+    <string name="range_high">High (5m\u03A9)</string>
+
+    <!-- Notification -->
+    <string name="auto_connect">Auto-connect device</string>
+    <string name="notification_push">Record Notification</string>
+    <string name="notification_enabled">Notification enabled</string>
+    <string name="notification_disabled">Notification disabled</string>
+    <string name="notification_enable_failed">Failed to enable notification</string>
+    <string name="recording_channel_name">Data Recording</string>
+    <string name="recording_channel_description">Recording in progress</string>
+    <string name="recording_notification_text">Recording data\u2026</string>
+    <string name="island_open_app">Open App</string>
+    <string name="island_channel_name">Power Meter Live</string>
+    <string name="island_channel_description">Live power measurement updates</string>
+    <string name="island_status_recording">Recording</string>
+    <string name="island_status_monitoring">Monitoring</string>
+    <string name="island_voltage_label">Voltage</string>
+    <string name="island_current_label">Current</string>
+
+    <!-- Language change notifications -->
+    <string name="language_changed_to_system">Switched to system default</string>
+    <string name="language_changed_to_chinese">Switched to Chinese</string>
+    <string name="language_changed_to_english">Switched to English</string>
+    <string name="language_changed_to_japanese">Switched to Japanese</string>
+
+    <!-- Settings -->
+    <string name="color_mode_changed">Color mode switched</string>
+
+    <!-- Connection events -->
+    <string name="event_connected">Device connected</string>
+    <string name="event_disconnected">Device disconnected</string>
+    <string name="event_no_device">No device found</string>
+    <string name="event_permission_denied">USB permission denied</string>
+    <string name="event_open_failed">Failed to open device</string>
+    <string name="event_no_port">No serial port found</string>
+    <string name="event_connect_failed">Connection failed: %1$s</string>
+    <string name="event_read_error">Read error, connection lost</string>
+
+    <!-- Export -->
+    <string name="export_need_pause">Please stop recording before exporting</string>
+    <string name="clear_confirm_title">Clear Data</string>
+    <string name="clear_confirm_message">Are you sure you want to clear all recording data?</string>
+    <string name="confirm_clear">Confirm Clear</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+
+    <!-- About -->
+    <string name="about_description">An Android app for collecting Power-Pico USB power meter data.</string>
+    <string name="version_info">Version Info</string>
+    <string name="version_number">Version</string>
+    <string name="build_date">Build Date</string>
+    <string name="changelog">Changelog</string>
+    <string name="changelog_title">Changelog</string>
+    <string name="changelog_content">- Brand new minimalist icon\n- Added notification, multi-language, and theme mode customization\n- Added auto-connect device feature\n- Added confirmation dialog when clearing recording data\n- Improved dark mode display\n- Improved app visuals and large-screen adaptation\n- Improved bottom bar display\n- Improved stability and logic of data recording\n- Improved stability and logic of data export\n- Improved app data cache retention logic\n- Improved in-app fluidity and app size\n- Fixed an issue where device calibration data could not be read</string>
+    <string name="github">GitHub</string>
+    <string name="author_label">Author</string>
+    <string name="special_thanks">Special Thanks</string>
+    <string name="game">Game</string>
+    <string name="game_xenoblade">XenobladeX DE NS2E</string>
+    <string name="github_power_pico">Power-Pico</string>
+    <string name="github_nexio_schedule">NexioSchedule</string>
+    <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="jrpg_thanks">JRPGs of my university life</string>
+    <string name="and_also">And</string>
 </resources>

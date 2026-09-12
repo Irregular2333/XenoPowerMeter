@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import com.irregular.xenopowermeter.MainActivity
 import com.irregular.xenopowermeter.R
@@ -35,12 +34,16 @@ class RecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
+        val localized = com.irregular.xenopowermeter.AppSettings.localizedContext(this)
+        // IMPORTANCE_MIN keeps the mandatory foreground-service notification
+        // out of the shade/lock screen — it's a keep-alive marker, not content;
+        // the island notification is the user-facing one.
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "数据录制",
-            NotificationManager.IMPORTANCE_LOW
+            localized.getString(R.string.recording_channel_name),
+            NotificationManager.IMPORTANCE_MIN
         ).apply {
-            description = "数据录制进行中"
+            description = localized.getString(R.string.recording_channel_description)
             setShowBadge(false)
         }
         val manager = getSystemService(NotificationManager::class.java)
@@ -57,7 +60,10 @@ class RecordingService : Service() {
 
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("XenoPowerMeter")
-            .setContentText("数据录制中...")
+            .setContentText(
+                com.irregular.xenopowermeter.AppSettings.localizedContext(this)
+                    .getString(R.string.recording_notification_text)
+            )
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

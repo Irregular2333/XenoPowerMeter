@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.XenoPowerMeter" parent="android:Theme.Material.Light.NoActionBar" />
-</resources>
+    <style name="Theme.XenoPowerMeter" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 
-<!-- Dark mode variant -->
-<!-- Place this in res/values-night/themes.xml -->
-<!-- <style name="Theme.XenoPowerMeter" parent="android:Theme.Material.NoActionBar" /> -->
+    <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F5F5F5</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <!-- Set directly: some ROMs (e.g. HyperOS) fail to resolve the compat
+             library's ?attr indirection for these system attributes and fall
+             back to the launcher icon, which renders as a plain square. -->
+        <item name="android:windowSplashScreenBackground">#F5F5F5</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
+    </style>
+</resources>

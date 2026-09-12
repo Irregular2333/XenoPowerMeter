@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Must match UsbCdcManager.isPowerPicoDevice: STM32 CDC, STM32 0x572B, Raspberry Pi Pico CDC -->
 <resources>
-    <!-- STM32 USB VID/PID (CDC ACM) -->
     <usb-device vendor-id="1155" product-id="22336" />
-    <!-- Raspberry Pi Pico CDC -->
-    <usb-device vendor-id="11914" product-id="5" />
+    <usb-device vendor-id="1155" product-id="22315" />
+    <usb-device vendor-id="11914" product-id="10" />
 </resources>

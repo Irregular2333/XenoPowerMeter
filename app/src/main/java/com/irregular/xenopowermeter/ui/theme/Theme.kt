@@ -11,12 +11,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.irregular.xenopowermeter.AppSettings
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF009FAA),
     secondary = Color(0xFF90CAF9),
     tertiary = Color(0xFF80CBC4),
-    background = Color(0xFF121212),
+    background = Color(0xFF000000),
     surface = Color(0xFF1E1E1E),
     onPrimary = Color.White,
     onBackground = Color.White,
@@ -36,9 +37,13 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun XenoPowerMeterTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (AppSettings.colorMode) {
+        AppSettings.ColorMode.SYSTEM -> isSystemInDarkTheme()
+        AppSettings.ColorMode.LIGHT -> false
+        AppSettings.ColorMode.DARK -> true
+    }
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current
@@ -46,7 +51,6 @@ fun XenoPowerMeterTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.decorView.setBackgroundColor(colorScheme.background.toArgb())
-            window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

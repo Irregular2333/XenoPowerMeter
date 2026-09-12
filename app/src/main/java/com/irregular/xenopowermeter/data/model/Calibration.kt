@@ -8,18 +8,6 @@ data class Calibration(
     val highScaleMultiplier: Float = 1.0f,
     val highOffsetUa: Float = 0.0f
 ) {
-    fun toByteArray(): ByteArray {
-        val buf = java.nio.ByteBuffer.allocate(24)
-            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
-        buf.putFloat(lowScaleMultiplier)
-        buf.putFloat(lowOffsetUa)
-        buf.putFloat(midScaleMultiplier)
-        buf.putFloat(midOffsetUa)
-        buf.putFloat(highScaleMultiplier)
-        buf.putFloat(highOffsetUa)
-        return buf.array()
-    }
-
     companion object {
         fun fromByteArray(data: ByteArray): Calibration? {
             if (data.size < 24) return null

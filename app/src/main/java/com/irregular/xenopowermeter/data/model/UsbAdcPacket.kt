@@ -14,36 +14,40 @@ data class UsbAdcPacket(
     companion object {
         const val HEADER_0: Byte = 0xAA.toByte()
         const val HEADER_1: Byte = 0x55
-        const val PACKET_SIZE = 81
         const val SAMPLES_PER_PACKET = 10
         const val BYTES_PER_SAMPLE = 7
 
-        fun parse(data: ByteArray): UsbAdcPacket? {
-            if (data.size < PACKET_SIZE) return null
-            if (data[0] != HEADER_0 || data[1] != HEADER_1) return null
+        /**
+         * Parses one packet starting at [offset]. Auto-ranging shortens chunks
+         * on the firmware side, so the actual packet length is 11 + 7*dataCount,
+         * not a fixed 81 bytes.
+         */
+        fun parse(data: ByteArray, offset: Int = 0): UsbAdcPacket? {
+            if (data.size - offset < 11) return null
+            if (data[offset] != HEADER_0 || data[offset + 1] != HEADER_1) return null
 
-            val timestamp = java.nio.ByteBuffer.wrap(data, 2, 8)
+            val timestamp = java.nio.ByteBuffer.wrap(data, offset + 2, 8)
                 .order(java.nio.ByteOrder.LITTLE_ENDIAN).long
 
-            val dataCount = data[10].toInt() and 0xFF
-            val samples = mutableListOf<Sample>()
+            val dataCount = data[offset + 10].toInt() and 0xFF
+            val samples = ArrayList<Sample>(dataCount)
 
             for (i in 0 until dataCount) {
-                val offset = 11 + i * BYTES_PER_SAMPLE
-                if (offset + BYTES_PER_SAMPLE > data.size) break
+                val off = offset + 11 + i * BYTES_PER_SAMPLE
+                if (off + BYTES_PER_SAMPLE > data.size) break
 
-                val range = data[offset].toInt() and 0xFF
-                val volAdc = java.nio.ByteBuffer.wrap(data, offset + 1, 2)
-                    .order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
-                val curAdc = java.nio.ByteBuffer.wrap(data, offset + 3, 2)
-                    .order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
-                val refAdc = java.nio.ByteBuffer.wrap(data, offset + 5, 2)
-                    .order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
+                val range = data[off].toInt() and 0xFF
+                val volAdc = readU16(data, off + 1)
+                val curAdc = readU16(data, off + 3)
+                val refAdc = readU16(data, off + 5)
 
                 samples.add(Sample(range, volAdc, curAdc, refAdc))
             }
 
             return UsbAdcPacket(timestamp, samples)
         }
+
+        private fun readU16(data: ByteArray, off: Int): Int =
+            (data[off].toInt() and 0xFF) or ((data[off + 1].toInt() and 0xFF) shl 8)
     }
 }

@@ -1,31 +1,32 @@
-<h1 align="center"><img src="./app/src/main/res/drawable/app_icon.png" width="100"><br>XenoPowerMeter<br><span style="display: inline-block; margin-top: 11px;"><sub><sup>An Android app for collecting Power-Pico USB power meter data.</sup></sub></span></h1>
+<h1 align="center"><img src="./screenshots/round_app_icon.png" width="100"><br>XenoPowerMeter<br><span style="display: inline-block; margin-top: 11px;"><sub><sup>一个用于采集Power-Pico数据的App</sup></sub></span></h1>
 
 <div align="center">
-<img src="https://img.shields.io/badge/Version-1.5.0-blue">
+<img src="https://img.shields.io/badge/Version-2.0.0-blue">
 <img src="https://img.shields.io/badge/License-Apache2.0-yellow">
 <img src="https://img.shields.io/badge/Kotlin-purple?logo=Kotlin">
 <img src="https://img.shields.io/badge/OS-Android-green">
 </div>
 
-<p align="center" style="margin-top: 24px;"><strong>本项目基于<a href="https://github.com/No-Chicken/Power-Pico">Power-Pico</a>以及<a href="https://github.com/No-Chicken/Power-Pico/blob/main/PC_Client/PowerPico_Client_Setup_v0.0.8.exe">PowerPico_Client</a>进行开发，仅适配Power-Pico USB电流表，实现了若干基本功能</strong></p>
+<p align="center" style="margin-top: 24px;"><strong>本项目基于<a href="https://github.com/No-Chicken/Power-Pico">Power-Pico</a>以及<a href="https://github.com/No-Chicken/Power-Pico/blob/main/PC_Client/PowerPico_Client_Setup_v0.0.8.exe">PowerPico_Client</a>进行开发，仅适配Power-Pico USB功率表，实现了若干基本功能</strong></p>
 
 ----
 
 ## 支持功能
-- 采集并查看电流、电压、功率等数据
-- 导入/导出数据，支持与PC端互通
-- 校准设备的部分参数
-- 适配Hyper OS超级岛
+- 采集并记录电流、电压、功率等数据
+- 导出已采集的数据，支持与PC版客户端互通
+- 调整量程，读取设备的量程参数
+- 适配小米Hyper OS超级岛(需解除超级岛白名单)
+- 支持多语言，已适配中日英三语
 
 ## 应用界面预览
 
-| <div align="center">平板-主页</div> | <div align="center">手机-主页</div> |
-|----------|----------|
-| <img src="./screenshots/Monitor.jpg" height="500"> | <img src="./screenshots/Monitor_Phone.jpg" height="500"> |
-| <div align="center">平板-设置</div> | <div align="center">手机-设置</div> |
-| <img src="./screenshots/Settings.jpg" height="500"> | <img src="./screenshots/Settings_Phone.jpg" height="500"> |
-| <div align="center">平板-关于</div> | <div align="center">手机-关于</div> |
-| <img src="./screenshots/About.jpg" height="500"> | <img src="./screenshots/About_Phone.jpg" height="500"> |
+| <div align="center">平板-主页</div> | <div align="center">手机-主页</div> | <div align="center">手机-深色模式-主页</div> |
+|----------|----------|----------|
+| <img src="./screenshots/Monitor.jpg" height="500"> | <img src="./screenshots/Monitor_Phone.jpg" height="500"> | <img src="./screenshots/Monitor_Phone_Dark.jpg" height="500"> |
+| <div align="center">平板-设置</div> | <div align="center">手机-设置</div> | <div align="center">手机-深色模式-设置</div> |
+| <img src="./screenshots/Settings.jpg" height="500"> | <img src="./screenshots/Settings_Phone.jpg" height="500"> | <img src="./screenshots/Settings_Phone_Dark.jpg" height="500"> |
+| <div align="center">平板-关于</div> | <div align="center">手机-关于</div> | <div align="center">手机-深色模式-关于</div> |
+| <img src="./screenshots/About.jpg" height="500"> | <img src="./screenshots/About_Phone.jpg" height="500"> | <img src="./screenshots/About_Phone_Dark.jpg" height="500"> |
 
 ## 超级岛适配预览
 
@@ -39,21 +40,22 @@
 
 ```
 app/src/main/java/com/irregular/xenopowermeter/
-├── MainActivity.kt                      
-├── ui/                                 // UI相关
+├── MainActivity.kt                     // 应用入口(单Activity+语言热切换)
+├── AppSettings.kt                      // 应用设置(语言/主题/通知/自动连接)
+├── ui/
 │   ├── main/
-│   │   └── MainScreen.kt               // 主界面
+│   │   └── MainScreen.kt               // 主界面(波形图/数值面板/按钮栏)
 │   ├── settings/
-│   │   └── SettingsScreen.kt           // 设置页
+│   │   └── SettingsScreen.kt           // 设置页(显示/数据记录/校准)
 │   ├── about/
-│   │   └── AboutScreen.kt              // 关于页 
+│   │   └── AboutScreen.kt              // 关于页
 │   ├── navigation/
-│   │   └── Navigation.kt               // 导航栏相关
+│   │   └── Navigation.kt               // 底栏页面定义
 │   └── theme/
 │       ├── Theme.kt                    // Material3主题配置
 │       └── Color.kt                    // 自定义颜色定义
 ├── viewmodel/
-│   └── WaveformViewModel.kt            // 核心功能：数据采集/图表/录制/USB通信
+│   └── WaveformViewModel.kt            // 核心：数据采集/波形图表/状态管理
 ├── data/
 │   ├── model/
 │   │   ├── UsbAdcPacket.kt             // USB数据包模型
@@ -61,11 +63,14 @@ app/src/main/java/com/irregular/xenopowermeter/
 │   │   └── Calibration.kt              // 校准参数模型
 │   ├── usb/
 │   │   ├── UsbCdcManager.kt            // USB CDC虚拟串口管理
-│   │   └── ProtocolParser.kt           // 协议解析器(帧同步/校验/CRC)
+│   │   ├── FrameDemuxer.kt             // 字节流分帧器(ADC包/响应帧)
+│   │   ├── Crc16.kt                    // CRC16-CCITT校验
+│   │   └── ProtocolParser.kt           // 协议解析器(采样换算/数据流分发)
 │   └── converter/
 │       └── DataConverter.kt            // 数据格式化(电压/电流/功率显示)
 ├── recording/
-│   └── Recorder.kt                     // 录制管理(内存存储+.bin/.csv 导出)
+│   ├── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
+│   └── RecordingService.kt             // 录制前台服务(保活通知)
 └── notification/
     └── IslandHelper.kt                 // 小米HyperOS 超级岛适配
 ```

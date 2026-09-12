@@ -1,11 +1,5 @@
 package com.irregular.xenopowermeter.data.model
 
-data class RecordEntry(
-    val timestamp: Double,
-    val voltage: Float,
-    val current: Float
-)
-
 enum class RangeMode(val code: Int, val displayName: String) {
     AUTO(0, "Auto"),
     LOW(1, "Low (50\u03A9)"),

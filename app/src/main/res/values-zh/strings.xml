@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XenoPowerMeter</string>
+
+    <!-- Navigation -->
+
+    <!-- Main Screen -->
+    <string name="voltage_label">电压</string>
+    <string name="current_label">电流</string>
+    <string name="power_label">功率</string>
+    <string name="avg_power_label">平均功率</string>
+    <string name="connect">连接设备</string>
+    <string name="disconnect">断开连接</string>
+    <string name="record">开始记录</string>
+    <string name="stop">停止记录</string>
+    <string name="clear">清除数据</string>
+    <string name="range">量程</string>
+
+    <!-- Settings Screen -->
+    <string name="data_record">数据记录</string>
+    <string name="record_count_label">记录数据数量</string>
+    <string name="recording_value">%d 条</string>
+    <string name="record_duration_label">记录时长</string>
+    <string name="duration_value">%.2fs</string>
+    <string name="export_recorded_data">导出已记录的数据</string>
+    <string name="export_option_bin">导出 .bin 文件</string>
+    <string name="export_option_csv">导出 .csv 文件</string>
+    <string name="export_bin_success">已导出 %1$d 条数据到 %2$s</string>
+    <string name="export_csv_success">已导出 %1$d 条数据到 %2$s</string>
+    <string name="export_dir_unknown">所选目录</string>
+    <string name="export_fail">导出失败</string>
+    <string name="calibration">量程参数读取</string>
+    <string name="calibration_low_scale">低量程系数</string>
+    <string name="calibration_low_offset">低量程偏移</string>
+    <string name="calibration_mid_scale">中量程系数</string>
+    <string name="calibration_mid_offset">中量程偏移</string>
+    <string name="calibration_high_scale">高量程系数</string>
+    <string name="calibration_high_offset">高量程偏移</string>
+    <string name="read">读取</string>
+
+    <!-- Display Settings -->
+    <string name="display">显示</string>
+    <string name="language">语言</string>
+    <string name="color_mode">主题模式</string>
+    <string name="system_default">跟随系统</string>
+    <string name="chinese">\u4e2d\u6587</string>
+    <string name="english">English</string>
+    <string name="japanese">日本語</string>
+    <string name="always_light">始终浅色</string>
+    <string name="always_dark">始终深色</string>
+
+    <!-- Range Mode -->
+    <string name="range_auto">自动</string>
+    <string name="range_low">低 (50\u03A9)</string>
+    <string name="range_mid">中 (0.5\u03A9)</string>
+    <string name="range_high">高 (5m\u03A9)</string>
+
+    <!-- Notification -->
+    <string name="auto_connect">自动连接设备</string>
+    <string name="notification_push">记录数据通知推送</string>
+    <string name="notification_enabled">已开启通知</string>
+    <string name="notification_disabled">已关闭通知</string>
+    <string name="notification_enable_failed">开启通知失败</string>
+
+    <!-- Language change notifications -->
+    <string name="language_changed_to_system">已切换为跟随系统</string>
+    <string name="language_changed_to_chinese">已切换为中文</string>
+    <string name="language_changed_to_english">已切换为English</string>
+    <string name="language_changed_to_japanese">已切换为日本語</string>
+
+    <!-- Settings -->
+    <string name="color_mode_changed">主题模式已切换</string>
+
+    <!-- Connection events -->
+    <string name="event_connected">设备已连接</string>
+    <string name="event_disconnected">设备已断开</string>
+    <string name="event_no_device">未找到设备</string>
+    <string name="event_permission_denied">USB 权限被拒绝</string>
+    <string name="event_open_failed">打开设备失败</string>
+    <string name="event_no_port">未找到串口</string>
+    <string name="event_connect_failed">连接失败：%1$s</string>
+    <string name="event_read_error">读取错误，连接已中断</string>
+
+    <!-- Export -->
+    <string name="export_need_pause">请先停止记录再导出</string>
+    <string name="clear_confirm_title">清除数据</string>
+    <string name="clear_confirm_message">确定要清除所有录制数据吗？</string>
+    <string name="confirm_clear">确认清除</string>
+    <string name="cancel">取消</string>
+    <string name="close">关闭</string>
+
+    <!-- About -->
+    <string name="about_description">一个用于采集Power-Pico数据的App</string>
+    <string name="version_info">版本信息</string>
+    <string name="version_number">版本号</string>
+    <string name="build_date">编译日期</string>
+    <string name="changelog">更新日志</string>
+    <string name="changelog_title">更新日志</string>
+    <string name="changelog_content">- 更换全新更简洁的图标\n- 新增通知、多语言、主题模式自定义\n- 新增自动连接设备功能\n- 新增清除录制数据时的二次确认弹窗\n- 优化了深色模式的显示效果\n- 优化了应用的显示效果与大屏适配\n- 优化了底栏的显示效果\n- 优化了记录数据功能的稳定性和逻辑\n- 优化了导出数据功能的稳定性和逻辑\n- 优化了应用数据缓存留存的逻辑\n- 优化了应用内的流畅度与包体存储\n- 修复无法读取设备校准数据的问题</string>
+    <string name="github">GitHub</string>
+    <string name="author_label">作者</string>
+    <string name="special_thanks">特别感谢</string>
+    <string name="game">游戏</string>
+    <string name="game_xenoblade">《异度神剑X 终极版 NS2版》</string>
+    <string name="github_power_pico">Power-Pico</string>
+    <string name="github_nexio_schedule">NexioSchedule</string>
+    <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="jrpg_thanks">陪伴我大学生活的JRPG们</string>
+    <string name="and_also">以及</string>
+    <string name="recording_channel_name">数据录制</string>
+    <string name="recording_channel_description">数据录制进行中</string>
+    <string name="recording_notification_text">数据录制中...</string>
+    <string name="island_open_app">打开应用</string>
+    <string name="island_channel_name">功率计实时状态</string>
+    <string name="island_channel_description">实时功率测量更新</string>
+    <string name="island_status_recording">录制中</string>
+    <string name="island_status_monitoring">监控中</string>
+    <string name="island_voltage_label">电压</string>
+    <string name="island_current_label">电流</string>
+</resources>

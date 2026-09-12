@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.XenoPowerMeter" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.XenoPowerMeter" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#000000</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
+    </style>
 </resources>

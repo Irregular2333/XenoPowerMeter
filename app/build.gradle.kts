@@ -1,3 +1,6 @@
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -17,13 +20,21 @@ android {
         applicationId = "com.irregular.xenopowermeter"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 2000000
+        versionName = "2.0.0"
+
+        // Bake the build date into the APK at compile time (zip entry
+        // timestamps are normalized by the toolchain, so the About page
+        // reads this instead). Day granularity: same-day rebuilds don't
+        // invalidate incremental compilation.
+        val buildDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy.MM.dd"))
+        buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -38,6 +49,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -55,30 +67,28 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
     // Shapes (required by backdrop)
-    implementation("io.github.kyant0:shapes:1.2.1")
 
     // Activity & ViewModel
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.9.7")
 
     // USB Serial
     implementation("com.github.mik3y:usb-serial-for-android:3.7.3")
-
-    // Charts
-    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Core
-    implementation("androidx.core:core-ktx:1.12.0")
+
+    // Splash Screen
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // AppCompat (required for locale switching)
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }

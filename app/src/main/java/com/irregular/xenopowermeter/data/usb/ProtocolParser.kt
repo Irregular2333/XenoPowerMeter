@@ -3,12 +3,15 @@ package com.irregular.xenopowermeter.data.usb
 import com.irregular.xenopowermeter.data.converter.DataConverter
 import com.irregular.xenopowermeter.data.model.Calibration
 import com.irregular.xenopowermeter.data.model.UsbAdcPacket
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 class ProtocolParser {
 
+    // Written from the calibration-loading coroutine, read from the USB read
+    // thread — volatile so a freshly loaded calibration is always visible.
+    @Volatile
     private var _calibration = Calibration.DEFAULT
 
     data class ParsedSample(
@@ -18,8 +21,12 @@ class ProtocolParser {
         val timestamp: Long
     )
 
-    private val _latestSamples = MutableStateFlow<List<ParsedSample>>(emptyList())
-    val latestSamples: StateFlow<List<ParsedSample>> = _latestSamples.asStateFlow()
+    // Unbounded: a conflated flow would silently drop sample batches whenever
+    // the collector (which also writes recordings to disk) briefly falls
+    // behind, making recordings lossy. trySend on an unbounded channel never
+    // blocks the USB read thread.
+    private val _sampleChannel = Channel<List<ParsedSample>>(Channel.UNLIMITED)
+    val sampleFlow: Flow<List<ParsedSample>> = _sampleChannel.receiveAsFlow()
 
     fun feedPacket(packet: UsbAdcPacket) {
         val parsed = packet.samples.map { sample ->
@@ -37,7 +44,7 @@ class ProtocolParser {
                 timestamp = packet.timestamp
             )
         }
-        _latestSamples.value = parsed
+        _sampleChannel.trySend(parsed)
     }
 
     fun updateCalibration(cal: Calibration) {

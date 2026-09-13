@@ -20,8 +20,8 @@ android {
         applicationId = "com.irregular.xenopowermeter"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2000000
-        versionName = "2.0.0"
+        versionCode = 2000100
+        versionName = "2.0.1"
 
         // Bake the build date into the APK at compile time (zip entry
         // timestamps are normalized by the toolchain, so the About page

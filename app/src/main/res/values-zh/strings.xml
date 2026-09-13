@@ -73,6 +73,8 @@
 
     <!-- Connection events -->
     <string name="event_connected">设备已连接</string>
+    <string name="recording_start_failed">录制启动失败</string>
+    <string name="recording_lost">录制已中断（写入错误）</string>
     <string name="event_disconnected">设备已断开</string>
     <string name="event_no_device">未找到设备</string>
     <string name="event_permission_denied">USB 权限被拒绝</string>
@@ -96,7 +98,7 @@
     <string name="build_date">编译日期</string>
     <string name="changelog">更新日志</string>
     <string name="changelog_title">更新日志</string>
-    <string name="changelog_content">- 更换全新更简洁的图标\n- 新增通知、多语言、主题模式自定义\n- 新增自动连接设备功能\n- 新增清除录制数据时的二次确认弹窗\n- 优化了深色模式的显示效果\n- 优化了应用的显示效果与大屏适配\n- 优化了底栏的显示效果\n- 优化了记录数据功能的稳定性和逻辑\n- 优化了导出数据功能的稳定性和逻辑\n- 优化了应用数据缓存留存的逻辑\n- 优化了应用内的流畅度与包体存储\n- 修复无法读取设备校准数据的问题</string>
+    <string name="changelog_content">- 进一步优化apk包体存储\n- 优化了应用的稳定性和流畅度\n- 优化了记录数据功能的稳定性\n- 优化了应用的多语言稳定性\n- 修复记录时偶现丢失数据的问题</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">特别感谢</string>

@@ -1,5 +1,6 @@
 package com.irregular.xenopowermeter.recording
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,12 @@ class Recorder {
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    // Set when start or a mid-session write fails so the ViewModel can tell
+    // the user the recording didn't happen / died, instead of just flipping
+    // the record button state.
+    private val _failed = MutableStateFlow(false)
+    val failed: StateFlow<Boolean> = _failed.asStateFlow()
+
     private val _entryCount = MutableStateFlow(0)
     val entryCount: StateFlow<Int> = _entryCount.asStateFlow()
 
@@ -47,6 +54,7 @@ class Recorder {
     val duration: StateFlow<Double> = _duration.asStateFlow()
 
     fun start(recordingsDir: File) {
+        _failed.value = false
         closeStream()
         totalEntries = 0
         lastElapsed = 0.0
@@ -74,9 +82,11 @@ class Recorder {
             recordingsDir.listFiles { f -> f.name.startsWith("recording_") && f != outFile }
                 ?.forEach { it.delete() }
         } catch (e: Exception) {
+            Log.e(TAG, "recording start failed", e)
             closeStream()
             file = null
             _isRecording.value = false
+            _failed.value = true
         }
     }
 
@@ -110,10 +120,12 @@ class Recorder {
             entryBuffer.putFloat(current)
             dos.write(entryBuffer.array())
         } catch (e: Exception) {
+            Log.e(TAG, "recording write failed, stopping session", e)
             closeStream()
             _isRecording.value = false
             _entryCount.value = totalEntries
             _duration.value = lastElapsed
+            _failed.value = true
             return
         }
 
@@ -189,6 +201,7 @@ class Recorder {
     }
 
     companion object {
+        private const val TAG = "Recorder"
         private val MAGIC = byteArrayOf(0x58, 0x50, 0x4D, 0x42) // "XPMB"
         private const val FORMAT_VERSION = 1
         private const val SAMPLE_RATE_HZ = 10_000

@@ -1,24 +1,7 @@
-# Add project specific ProGuard rules here.
--keep class com.irregular.xenopowermeter.data.model.** { *; }
--keep class com.irregular.xenopowermeter.data.usb.** { *; }
+# The app doesn't use reflection over its own classes, and usb-serial-for-android,
+# Compose and the vendored :backdrop module all ship their own consumer rules —
+# R8 can shrink all of them without blanket keeps (the previous
+# "-keep class androidx.compose.** { *; }" defeated shrinking of the entire
+# Compose stack). Add targeted rules here only if a release build actually
+# breaks at runtime.
 -dontwarn com.hoho.android.usbserial.**
-
-# Compose
--dontwarn androidx.compose.**
--keep class androidx.compose.** { *; }
-
-# Backdrop library
--keep class io.github.kyant0.** { *; }
--dontwarn io.github.kyant0.**
-
-# Kotlin coroutines
--keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
--keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
--keepclassmembers class kotlinx.coroutines.** {
-    volatile <fields>;
-}
-
-# Keep data classes for serialization
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}

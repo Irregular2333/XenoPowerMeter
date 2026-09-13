@@ -82,6 +82,17 @@ fun AboutScreen() {
     val scrollState = rememberScrollState()
     val backgroundColor = MaterialTheme.colorScheme.background
 
+    // The top fade dissolves away once the list rests at the very top (the
+    // content then starts right below the image with nothing to wash), and
+    // returns as soon as content slides underneath the pinned image.
+    val topObscured by remember {
+        derivedStateOf { scrollState.value > 0 }
+    }
+    val topFadeAlpha by animateFloatAsState(
+        targetValue = if (topObscured) 1f else 0f,
+        animationSpec = tween(durationMillis = 200)
+    )
+
     // The bottom fade dissolves away (200ms) once the list rests at the very
     // bottom — nothing left to wash there — and returns on scrolling up.
     val bottomObscured by remember {
@@ -95,6 +106,7 @@ fun AboutScreen() {
     if (isLandscape) {
         LandscapeAboutLayout(
             scrollState = scrollState,
+            topFadeAlpha = topFadeAlpha,
             bottomFadeAlpha = bottomFadeAlpha,
             backgroundColor = backgroundColor,
             darkTheme = darkTheme,
@@ -104,6 +116,7 @@ fun AboutScreen() {
     } else {
         PortraitAboutLayout(
             scrollState = scrollState,
+            topFadeAlpha = topFadeAlpha,
             bottomFadeAlpha = bottomFadeAlpha,
             backgroundColor = backgroundColor,
             darkTheme = darkTheme,
@@ -116,6 +129,7 @@ fun AboutScreen() {
 @Composable
 private fun PortraitAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
+    topFadeAlpha: Float,
     bottomFadeAlpha: Float,
     backgroundColor: Color,
     darkTheme: Boolean,
@@ -134,13 +148,13 @@ private fun PortraitAboutLayout(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            AboutHeaderImage(imageHeightDp)
+            // Content starts below the pinned header image and slides under
+            // it when scrolling up.
+            Spacer(modifier = Modifier.height(imageHeightDp + 16.dp))
 
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-
                 VersionInfoSection()
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -155,6 +169,10 @@ private fun PortraitAboutLayout(
             Spacer(modifier = Modifier.height(bottomRestSpace))
         }
 
+        TopFadeGradient(topFadeAlpha, imageHeightDp, backgroundColor)
+
+        AboutHeaderImage(imageHeightDp, Modifier.align(Alignment.TopCenter))
+
         FadeGradient(bottomFadeAlpha, backgroundColor)
     }
 }
@@ -162,6 +180,7 @@ private fun PortraitAboutLayout(
 @Composable
 private fun LandscapeAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
+    topFadeAlpha: Float,
     bottomFadeAlpha: Float,
     backgroundColor: Color,
     darkTheme: Boolean,
@@ -170,7 +189,9 @@ private fun LandscapeAboutLayout(
 ) {
     val imageHeightDp = (screenHeightDp * 0.3f).dp
     // Lets the last section rest 8dp above the floating bar at full scroll,
-    // matching the Settings page (About's viewport has no bottom padding).
+    // matching the Settings page. No inner vertical padding here — the
+    // portrait layout has none either, and the extra 8dp used to make the
+    // landscape bottom whitespace visibly larger than Settings'.
     val bottomRestSpace = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
         .asPaddingValues().calculateBottomPadding() + 68.dp
 
@@ -180,13 +201,11 @@ private fun LandscapeAboutLayout(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            AboutHeaderImage(imageHeightDp)
+            Spacer(modifier = Modifier.height(imageHeightDp + 16.dp))
 
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -215,6 +234,10 @@ private fun LandscapeAboutLayout(
             Spacer(modifier = Modifier.height(bottomRestSpace))
         }
 
+        TopFadeGradient(topFadeAlpha, imageHeightDp, backgroundColor)
+
+        AboutHeaderImage(imageHeightDp, Modifier.align(Alignment.TopCenter))
+
         FadeGradient(bottomFadeAlpha, backgroundColor)
     }
 }
@@ -230,9 +253,11 @@ private fun DisplaySectionTitle(title: String) {
 }
 
 @Composable
-private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp) {
+private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    // Pinned at the top of the page (not part of the scroll column): the
+    // status bar sits over the image, and content slides underneath it.
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(imageHeightDp)
     ) {
@@ -509,6 +534,28 @@ private fun SpecialThanksCard(context: android.content.Context) {
  */
 private val BottomFadeSpillFactor = 0.5f
 private val BottomFadeFixedDistance = 32.dp
+
+// Same strength as the Settings page's top fade (64dp, background →
+// transparent), but hung right below the pinned header image's bottom edge
+// instead of the screen top: content sliding under the image dissolves out
+// instead of colliding with the image edge and the status bar.
+@Composable
+private fun BoxScope.TopFadeGradient(topFadeAlpha: Float, imageHeightDp: androidx.compose.ui.unit.Dp, backgroundColor: Color) {
+    if (topFadeAlpha > 0f) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = imageHeightDp)
+                .height(64.dp)
+                .alpha(topFadeAlpha)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(backgroundColor, Color.Transparent)
+                    )
+                )
+        )
+    }
+}
 
 @Composable
 private fun BoxScope.FadeGradient(bottomFadeAlpha: Float, backgroundColor: Color) {

@@ -131,9 +131,11 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                     context.contentResolver.openOutputStream(uri)?.use { os ->
                         recorder.exportToBin(os)
                     }
+                    // Resolve the directory here (ContentResolver.query is
+                    // binder IPC) — not on the main thread below.
+                    val dirText = exportDirName(context, uri)
+                        .ifEmpty { context.getString(R.string.export_dir_unknown) }
                     scope.launch(Dispatchers.Main) {
-                        val dirText = exportDirName(context, uri)
-                            .ifEmpty { context.getString(R.string.export_dir_unknown) }
                         snackbarHostState.showSnackbar(
                             context.getString(R.string.export_bin_success, entryCount, dirText)
                         )
@@ -158,9 +160,9 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                     context.contentResolver.openOutputStream(uri)?.use { os ->
                         recorder.exportToCsv(os)
                     }
+                    val dirText = exportDirName(context, uri)
+                        .ifEmpty { context.getString(R.string.export_dir_unknown) }
                     scope.launch(Dispatchers.Main) {
-                        val dirText = exportDirName(context, uri)
-                            .ifEmpty { context.getString(R.string.export_dir_unknown) }
                         snackbarHostState.showSnackbar(
                             context.getString(R.string.export_csv_success, entryCount, dirText)
                         )

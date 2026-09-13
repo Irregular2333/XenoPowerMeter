@@ -73,6 +73,8 @@
 
     <!-- Connection events -->
     <string name="event_connected">デバイスが接続されました</string>
+    <string name="recording_start_failed">記録を開始できませんでした</string>
+    <string name="recording_lost">記録が中断されました（書き込みエラー）</string>
     <string name="event_disconnected">デバイスが切断されました</string>
     <string name="event_no_device">デバイスが見つかりません</string>
     <string name="event_permission_denied">USB権限が拒否されました</string>
@@ -96,7 +98,7 @@
     <string name="build_date">ビルド日</string>
     <string name="changelog">更新履歴</string>
     <string name="changelog_title">更新履歴</string>
-    <string name="changelog_content">- よりシンプルな新アイコンに変更\n- 通知・多言語・テーマモードのカスタマイズを追加\n- デバイス自動接続機能を追加\n- 記録データ消去時の確認ダイアログを追加\n- ダークモードの表示を改善\n- アプリの表示と大画面対応を改善\n- ボトムバーの表示を改善\n- データ記録機能の安定性とロジックを改善\n- データエクスポート機能の安定性とロジックを改善\n- アプリデータキャッシュの保持ロジックを改善\n- アプリ内の滑らかさとアプリサイズを改善\n- デバイスのキャリブレーションデータを読み取れない問題を修正</string>
+    <string name="changelog_content">- APKサイズをさらに最適化\n- アプリの安定性と滑らかさを改善\n- データ記録機能の安定性を改善\n- 多言語の安定性を改善\n- 記録中にまれに発生するデータ欠落を修正</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">スペシャルサンクス</string>

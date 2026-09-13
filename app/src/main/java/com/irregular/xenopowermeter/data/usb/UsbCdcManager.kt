@@ -39,6 +39,12 @@ class UsbCdcManager(private val context: Context) {
     private val nextSequence = AtomicInteger(1)
     private val pendingResponses = ConcurrentHashMap<Int, PendingCommand>()
 
+    // Manager-owned scope for connect/read/disconnect jobs: unlike ad-hoc
+    // CoroutineScope(...) launches these can be tracked and cancelled, and
+    // none of them leak an unmanaged parent job.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var connectJob: Job? = null
+
     private class PendingCommand(val type: CmdType) {
         val deferred = CompletableDeferred<CmdResponse>()
     }
@@ -78,7 +84,7 @@ class UsbCdcManager(private val context: Context) {
                         }
                         val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                         if (granted && device != null) {
-                            CoroutineScope(Dispatchers.IO).launch {
+                            connectJob = scope.launch {
                                 connectToDevice(device)
                             }
                         } else {
@@ -117,7 +123,7 @@ class UsbCdcManager(private val context: Context) {
         try {
             if (usbManager.hasPermission(device)) {
                 Log.i(TAG, "USB permission already granted, connecting...")
-                CoroutineScope(Dispatchers.IO).launch {
+                connectJob = scope.launch {
                     connectToDevice(device)
                 }
                 return
@@ -192,6 +198,7 @@ class UsbCdcManager(private val context: Context) {
                 onConnected?.invoke()
                 Log.i(TAG, "USB connected")
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e(TAG, "connectToDevice failed", e)
                 isConnected = false
                 onError?.invoke(context.getString(R.string.event_connect_failed, e.message ?: ""))
@@ -202,7 +209,7 @@ class UsbCdcManager(private val context: Context) {
     }
 
     private fun startReading() {
-        readJob = CoroutineScope(Dispatchers.IO).launch {
+        readJob = scope.launch {
             val buffer = ByteArray(256)
             var failures = 0
             while (isActive && isConnected) {
@@ -314,12 +321,21 @@ class UsbCdcManager(private val context: Context) {
         isConnected = false
         readJob?.cancel()
         readJob = null
+        connectJob?.cancel()
+        connectJob = null
         pendingResponses.values.forEach { it.deferred.cancel() }
         pendingResponses.clear()
-        try {
-            serialPort?.close()
-        } catch (_: Exception) {}
+        val portToClose = serialPort
         serialPort = null
+        // Control transfers inside close() can block for tens of ms; when the
+        // caller is the DETACHED broadcast receiver (main thread) that would
+        // jank the UI, so close off-thread. isConnected is already false, so
+        // no new traffic can target the port.
+        scope.launch {
+            try {
+                portToClose?.close()
+            } catch (_: Exception) {}
+        }
         if (receiverRegistered) {
             try {
                 context.unregisterReceiver(usbReceiver)
@@ -334,7 +350,7 @@ class UsbCdcManager(private val context: Context) {
         const val ACTION_USB_PERMISSION = "com.irregular.xenopowermeter.USB_PERMISSION"
         private const val PROTOCOL_VERSION = 1
         // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen (CRC excluded)
-        private const val CMD_HEADER_SIZE = 10
+        private const val CMD_HEADER_SIZE = 8
         private const val MAX_PAYLOAD = 48
         private const val COMMAND_TIMEOUT_MS = 500L
         private const val OPEN_DEVICE_ATTEMPTS = 3

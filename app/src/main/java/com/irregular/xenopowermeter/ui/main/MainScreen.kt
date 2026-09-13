@@ -15,15 +15,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irregular.xenopowermeter.R
@@ -270,38 +272,47 @@ private fun AutoSizeText(
     fontWeight: FontWeight = FontWeight.Bold,
     fontFamily: FontFamily = FontFamily.Monospace
 ) {
-    SubcomposeLayout { constraints ->
-        var currentSize = maxFontSize
-        val unconstrained = constraints.copy(maxWidth = Int.MAX_VALUE)
-
-        while (currentSize > minFontSize) {
-            val testStyle = TextStyle(
-                fontSize = currentSize,
-                fontWeight = fontWeight,
-                fontFamily = fontFamily,
-                color = color,
-                textAlign = TextAlign.Center
+    // Direct TextMeasurer shrink: a linear estimate from one full-size layout
+    // plus a step-down verify — at most 2-3 plain text layouts per text change.
+    // The subcompose-based linear search this replaces re-ran up to 8
+    // sub-compositions per value at 1 Hz forever.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val maxWidthPx = constraints.maxWidth
+        val measurer = rememberTextMeasurer()
+        val style = TextStyle(
+            fontWeight = fontWeight,
+            fontFamily = fontFamily,
+            textAlign = TextAlign.Center
+        )
+        val fontSize = remember(text, maxWidthPx) {
+            var size = maxFontSize
+            val full = measurer.measure(
+                text, style.copy(fontSize = size), maxLines = 1, constraints = Constraints()
             )
-            val measured = subcompose("measure_$currentSize") {
-                Text(text = text, style = testStyle, maxLines = 1)
-            }.first().measure(unconstrained)
-            if (measured.width <= constraints.maxWidth) break
-            currentSize = TextUnit(currentSize.value - 1f, currentSize.type)
+            if (full.size.width > maxWidthPx) {
+                val estimated = (maxFontSize.value * maxWidthPx / full.size.width)
+                    .coerceIn(minFontSize.value, maxFontSize.value)
+                size = TextUnit(estimated, TextUnitType.Sp)
+                while (size > minFontSize) {
+                    val layout = measurer.measure(
+                        text, style.copy(fontSize = size), maxLines = 1, constraints = Constraints()
+                    )
+                    if (layout.size.width <= maxWidthPx) break
+                    size = TextUnit(size.value - 1f, TextUnitType.Sp)
+                }
+            }
+            size
         }
-
-        val finalStyle = TextStyle(
-            fontSize = currentSize,
+        Text(
+            text,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = fontSize,
             fontWeight = fontWeight,
             fontFamily = fontFamily,
             color = color,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
-        val placeable = subcompose("content") {
-            Text(text = text, style = finalStyle, maxLines = 1)
-        }.first().measure(constraints)
-        layout(placeable.width, placeable.height) {
-            placeable.place(0, 0)
-        }
     }
 }
 

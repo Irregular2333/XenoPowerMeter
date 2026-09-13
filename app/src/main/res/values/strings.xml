@@ -83,6 +83,8 @@
 
     <!-- Connection events -->
     <string name="event_connected">Device connected</string>
+    <string name="recording_start_failed">Recording failed to start</string>
+    <string name="recording_lost">Recording was interrupted (write error)</string>
     <string name="event_disconnected">Device disconnected</string>
     <string name="event_no_device">No device found</string>
     <string name="event_permission_denied">USB permission denied</string>
@@ -106,7 +108,7 @@
     <string name="build_date">Build Date</string>
     <string name="changelog">Changelog</string>
     <string name="changelog_title">Changelog</string>
-    <string name="changelog_content">- Brand new minimalist icon\n- Added notification, multi-language, and theme mode customization\n- Added auto-connect device feature\n- Added confirmation dialog when clearing recording data\n- Improved dark mode display\n- Improved app visuals and large-screen adaptation\n- Improved bottom bar display\n- Improved stability and logic of data recording\n- Improved stability and logic of data export\n- Improved app data cache retention logic\n- Improved in-app fluidity and app size\n- Fixed an issue where device calibration data could not be read</string>
+    <string name="changelog_content">- Further optimized APK size\n- Improved app stability and fluidity\n- Improved data recording stability\n- Improved multi-language stability\n- Fixed occasional data loss during recording</string>
     <string name="github">GitHub</string>
     <string name="author_label">Author</string>
     <string name="special_thanks">Special Thanks</string>

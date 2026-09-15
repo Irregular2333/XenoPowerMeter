@@ -48,6 +48,11 @@
     <string name="english">English</string>
     <string name="always_light">ライトモード</string>
     <string name="always_dark">ダークモード</string>
+    <string name="chart_scale_mode">チャートスケール</string>
+    <string name="chart_scale_auto">自動</string>
+    <string name="chart_scale_full_range">フルレンジ</string>
+    <string name="recording_duration_limit">記録時間上限</string>
+    <string name="recording_duration_value">%d 分</string>
 
     <!-- Range Mode -->
     <string name="range_auto">自動</string>
@@ -87,6 +92,7 @@
     <string name="export_need_pause">エクスポート前に記録を停止してください</string>
     <string name="clear_confirm_title">データ消去</string>
     <string name="clear_confirm_message">すべての録画データを消去してもよろしいですか？</string>
+    <string name="clear_recorded_data_confirm">すべての記録データを消去しますか？この操作は取り消せません。</string>
     <string name="confirm_clear">消去を確認</string>
     <string name="cancel">キャンセル</string>
     <string name="close">閉じる</string>
@@ -98,7 +104,7 @@
     <string name="build_date">ビルド日</string>
     <string name="changelog">更新履歴</string>
     <string name="changelog_title">更新履歴</string>
-    <string name="changelog_content">- APKサイズをさらに最適化\n- アプリの安定性と滑らかさを改善\n- データ記録機能の安定性を改善\n- 多言語の安定性を改善\n- 記録中にまれに発生するデータ欠落を修正</string>
+    <string name="changelog_content">- チャートスケール機能を追加\n- 記録時間上限を追加\n- アプリの安定性を改善\n- デバイスページのロジックを最適化</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">スペシャルサンクス</string>

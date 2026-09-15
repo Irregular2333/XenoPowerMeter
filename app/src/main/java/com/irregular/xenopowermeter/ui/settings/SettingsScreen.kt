@@ -349,7 +349,7 @@ private fun PortraitSettingsLayout(
             val valueColor = AppColors.linkColor()
 
             DisplaySectionTitle(stringResource(R.string.display))
-            DisplayCard(cardTextColor, valueColor, context) { msg ->
+            DisplayCard(cardTextColor, valueColor, viewModel, context) { msg ->
                 scope.launch { snackbarHostState.showSnackbar(msg) }
             }
 
@@ -400,7 +400,7 @@ private fun LandscapeSettingsLayout(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DisplaySectionTitle(stringResource(R.string.display))
-                DisplayCard(cardTextColor, valueColor, context) { msg ->
+                DisplayCard(cardTextColor, valueColor, viewModel, context) { msg ->
                     scope.launch { snackbarHostState.showSnackbar(msg) }
                 }
 
@@ -433,9 +433,12 @@ private fun DisplaySectionTitle(title: String) {
 private fun DisplayCard(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color,
+    viewModel: WaveformViewModel,
     context: android.content.Context,
     onSnackbar: (String) -> Unit
 ) {
+    @Suppress("UNUSED_VARIABLE")
+    val lang = AppSettings.language
     val cardColor = AppColors.cardColor()
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -446,6 +449,9 @@ private fun DisplayCard(
             ColorModeSetting(labelColor, valueColor) {
                 onSnackbar(context.getString(R.string.color_mode_changed))
             }
+            ChartScaleModeSetting(labelColor, valueColor)
+            RangeSetting(labelColor, valueColor) { range -> viewModel.setRange(range) }
+            AutoConnectSetting(labelColor, valueColor)
         }
     }
 }
@@ -473,11 +479,10 @@ private fun DataRecordCard(
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)) {
-            RangeSetting(labelColor, valueColor) { range -> viewModel.setRange(range) }
             NotificationSetting(labelColor, valueColor, permissionLauncher) { msg ->
                 scope.launch { snackbarHostState.showSnackbar(msg) }
             }
-            AutoConnectSetting(labelColor, valueColor)
+            RecordingDurationLimitSetting(labelColor, valueColor)
 
             Row(
                 modifier = Modifier.fillMaxWidth().height(38.dp),
@@ -499,58 +504,94 @@ private fun DataRecordCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             var showExportMenu by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        if (recorder.isRecording.value) {
-                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.export_need_pause)) }
-                        } else {
-                            showExportMenu = true
-                        }
-                    },
-                    enabled = entryCount > 0,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = settingsButtonColor,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
-                        disabledContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(R.string.export_recorded_data))
-                }
-                // Zero-size anchor at the button's bottom-right corner: the
-                // menu popup positions itself from here, so it opens at the
-                // right edge instead of the left.
-                Box(modifier = Modifier.align(Alignment.BottomEnd)) {
-                    DropdownMenu(
-                        expanded = showExportMenu,
-                        onDismissRequest = { showExportMenu = false }
+            var showClearDialog by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    Button(
+                        onClick = {
+                            if (recorder.isRecording.value) {
+                                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.export_need_pause)) }
+                            } else {
+                                showExportMenu = true
+                            }
+                        },
+                        enabled = entryCount > 0,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = settingsButtonColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export_option_bin)) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                            },
-                            onClick = {
-                                showExportMenu = false
-                                saveBinLauncher.launch(generateFileName("bin"))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export_option_csv)) },
-                            leadingIcon = {
-                                Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
-                            },
-                            onClick = {
-                                showExportMenu = false
-                                saveCsvLauncher.launch(generateFileName("csv"))
-                            }
-                        )
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.export_recorded_data))
+                    }
+                    val exportCtx = AppSettings.localizedContext(context)
+                    Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                        DropdownMenu(
+                            expanded = showExportMenu,
+                            onDismissRequest = { showExportMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(exportCtx.getString(R.string.export_option_bin)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                                },
+                                onClick = {
+                                    showExportMenu = false
+                                    saveBinLauncher.launch(generateFileName("bin"))
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(exportCtx.getString(R.string.export_option_csv)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                                },
+                                onClick = {
+                                    showExportMenu = false
+                                    saveCsvLauncher.launch(generateFileName("csv"))
+                                }
+                            )
+                        }
                     }
                 }
+                Box {
+                    Button(
+                        onClick = { showClearDialog = true },
+                        enabled = entryCount > 0 && !recorder.isRecording.value,
+                        modifier = Modifier.fillMaxHeight(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = settingsButtonColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+
+            if (showClearDialog) {
+                AlertDialog(
+                    onDismissRequest = { showClearDialog = false },
+                    title = { Text(stringResource(R.string.clear_confirm_title)) },
+                    text = { Text(stringResource(R.string.clear_recorded_data_confirm)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showClearDialog = false
+                            recorder.clearRecording()
+                        }) { Text(stringResource(R.string.confirm_clear)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearDialog = false }) { Text(stringResource(R.string.cancel)) }
+                    }
+                )
             }
         }
     }
@@ -604,6 +645,7 @@ private fun LanguageSetting(
     onChanged: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val langCtx = AppSettings.localizedContext(context)
     var expanded by remember { mutableStateOf(false) }
     val currentLanguage = AppSettings.language
 
@@ -613,6 +655,10 @@ private fun LanguageSetting(
         AppSettings.Language.ENGLISH -> stringResource(R.string.english)
         AppSettings.Language.JAPANESE -> stringResource(R.string.japanese)
     }
+    val sysText = langCtx.getString(R.string.system_default)
+    val zhText = langCtx.getString(R.string.chinese)
+    val enText = langCtx.getString(R.string.english)
+    val jaText = langCtx.getString(R.string.japanese)
 
     Box {
         Row(
@@ -645,35 +691,35 @@ private fun LanguageSetting(
             offset = DpOffset((-80).dp, 0.dp)
         ) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.system_default)) },
+                text = { Text(sysText) },
                 onClick = {
                     AppSettings.updateLanguage(AppSettings.Language.SYSTEM)
                     expanded = false
-                    onChanged(AppSettings.localizedContext(context).getString(R.string.language_changed_to_system))
+                    onChanged(langCtx.getString(R.string.language_changed_to_system))
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.chinese)) },
+                text = { Text(zhText) },
                 onClick = {
                     AppSettings.updateLanguage(AppSettings.Language.CHINESE)
                     expanded = false
-                    onChanged(AppSettings.localizedContext(context).getString(R.string.language_changed_to_chinese))
+                    onChanged(langCtx.getString(R.string.language_changed_to_chinese))
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.english)) },
+                text = { Text(enText) },
                 onClick = {
                     AppSettings.updateLanguage(AppSettings.Language.ENGLISH)
                     expanded = false
-                    onChanged(AppSettings.localizedContext(context).getString(R.string.language_changed_to_english))
+                    onChanged(langCtx.getString(R.string.language_changed_to_english))
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.japanese)) },
+                text = { Text(jaText) },
                 onClick = {
                     AppSettings.updateLanguage(AppSettings.Language.JAPANESE)
                     expanded = false
-                    onChanged(AppSettings.localizedContext(context).getString(R.string.language_changed_to_japanese))
+                    onChanged(langCtx.getString(R.string.language_changed_to_japanese))
                 }
             )
         }
@@ -688,12 +734,16 @@ private fun ColorModeSetting(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentMode = AppSettings.colorMode
+    val localizedCtx = AppSettings.localizedContext(LocalContext.current)
 
     val modeText = when (currentMode) {
         AppSettings.ColorMode.SYSTEM -> stringResource(R.string.system_default)
         AppSettings.ColorMode.LIGHT -> stringResource(R.string.always_light)
         AppSettings.ColorMode.DARK -> stringResource(R.string.always_dark)
     }
+    val systemText = localizedCtx.getString(R.string.system_default)
+    val lightText = localizedCtx.getString(R.string.always_light)
+    val darkText = localizedCtx.getString(R.string.always_dark)
 
     Box {
         Row(
@@ -726,7 +776,7 @@ private fun ColorModeSetting(
             offset = DpOffset((-80).dp, 0.dp)
         ) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.system_default)) },
+                text = { Text(systemText) },
                 onClick = {
                     AppSettings.updateColorMode(AppSettings.ColorMode.SYSTEM)
                     expanded = false
@@ -734,7 +784,7 @@ private fun ColorModeSetting(
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.always_light)) },
+                text = { Text(lightText) },
                 onClick = {
                     AppSettings.updateColorMode(AppSettings.ColorMode.LIGHT)
                     expanded = false
@@ -742,11 +792,75 @@ private fun ColorModeSetting(
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.always_dark)) },
+                text = { Text(darkText) },
                 onClick = {
                     AppSettings.updateColorMode(AppSettings.ColorMode.DARK)
                     expanded = false
                     onChanged()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChartScaleModeSetting(
+    labelColor: androidx.compose.ui.graphics.Color,
+    valueColor: androidx.compose.ui.graphics.Color
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentMode = AppSettings.chartScaleMode
+    val localizedCtx = AppSettings.localizedContext(LocalContext.current)
+
+    val modeText = when (currentMode) {
+        AppSettings.ChartScaleMode.AUTO -> stringResource(R.string.chart_scale_auto)
+        AppSettings.ChartScaleMode.FULL_RANGE -> stringResource(R.string.chart_scale_full_range)
+    }
+    val autoText = localizedCtx.getString(R.string.chart_scale_auto)
+    val fullRangeText = localizedCtx.getString(R.string.chart_scale_full_range)
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .clickable { expanded = true },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.chart_scale_mode), fontSize = 15.sp, color = labelColor)
+            Box(
+                modifier = Modifier.width(130.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(modeText, fontSize = 15.sp, color = valueColor)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            offset = DpOffset((-80).dp, 0.dp)
+        ) {
+            DropdownMenuItem(
+                text = { Text(autoText) },
+                onClick = {
+                    AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.AUTO)
+                    expanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(fullRangeText) },
+                onClick = {
+                    AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.FULL_RANGE)
+                    expanded = false
                 }
             )
         }
@@ -853,6 +967,61 @@ private fun AutoConnectSetting(
 }
 
 @Composable
+private fun RecordingDurationLimitSetting(
+    labelColor: androidx.compose.ui.graphics.Color,
+    valueColor: androidx.compose.ui.graphics.Color
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLimit = AppSettings.recordingDurationLimitMin
+    val limitCtx = AppSettings.localizedContext(LocalContext.current)
+
+    val limitText = String.format(limitCtx.getString(R.string.recording_duration_value), currentLimit)
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .clickable { expanded = true },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.recording_duration_limit), fontSize = 15.sp, color = labelColor)
+            Box(
+                modifier = Modifier.width(130.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(limitText, fontSize = 15.sp, color = valueColor)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            offset = DpOffset((-80).dp, 0.dp)
+        ) {
+            AppSettings.RECORDING_DURATION_OPTIONS.forEach { minutes ->
+                val label = String.format(limitCtx.getString(R.string.recording_duration_value), minutes)
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        AppSettings.updateRecordingDurationLimit(minutes)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun RangeSetting(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color,
@@ -860,6 +1029,7 @@ private fun RangeSetting(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentRange = AppSettings.range
+    val rangeCtx = AppSettings.localizedContext(LocalContext.current)
 
     val rangeText = when (currentRange) {
         RangeMode.AUTO -> stringResource(R.string.range_auto)
@@ -867,6 +1037,10 @@ private fun RangeSetting(
         RangeMode.MID -> stringResource(R.string.range_mid)
         RangeMode.HIGH -> stringResource(R.string.range_high)
     }
+    val autoText = rangeCtx.getString(R.string.range_auto)
+    val lowText = rangeCtx.getString(R.string.range_low)
+    val midText = rangeCtx.getString(R.string.range_mid)
+    val highText = rangeCtx.getString(R.string.range_high)
 
     Box {
         Row(
@@ -900,10 +1074,10 @@ private fun RangeSetting(
         ) {
             RangeMode.entries.forEach { mode ->
                 val label = when (mode) {
-                    RangeMode.AUTO -> stringResource(R.string.range_auto)
-                    RangeMode.LOW -> stringResource(R.string.range_low)
-                    RangeMode.MID -> stringResource(R.string.range_mid)
-                    RangeMode.HIGH -> stringResource(R.string.range_high)
+                    RangeMode.AUTO -> autoText
+                    RangeMode.LOW -> lowText
+                    RangeMode.MID -> midText
+                    RangeMode.HIGH -> highText
                 }
                 DropdownMenuItem(
                     text = { Text(label) },

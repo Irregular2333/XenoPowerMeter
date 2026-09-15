@@ -109,7 +109,9 @@ class FrameDemuxer(
     companion object {
         private const val CMD_HEADER_0: Byte = 0xA5.toByte()
         private const val CMD_HEADER_1: Byte = 0x5A.toByte()
-        // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen (CRC excluded)
+        // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen + 1 status (CRC excluded)
+        // Firmware responses include a status byte in the header; outgoing
+        // commands from buildFrame() use a 8-byte header without status.
         private const val CMD_HEADER_SIZE = 10
         // 1 status + CMD_PROTOCOL_MAX_PAYLOAD, mirroring user_CmdStrategy.c
         private const val MAX_RESPONSE_PAYLOAD = 49

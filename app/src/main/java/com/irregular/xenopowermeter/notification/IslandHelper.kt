@@ -16,14 +16,19 @@ object IslandHelper {
 
     private const val CHANNEL_ID = "power_meter_live"
     private const val NOTIFICATION_ID = 1001
+    private const val PREF_NAME = "island_helper"
+    private const val KEY_RECORDING_START_MS = "recording_start_ms"
 
     private var notificationManager: NotificationManager? = null
     private var quotes: List<String> = emptyList()
     private var currentQuote: String = ""
     private var recordingStartTimeMs: Long = 0L
+    private var prefs: android.content.SharedPreferences? = null
 
     fun init(context: Context) {
         notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        recordingStartTimeMs = prefs?.getLong(KEY_RECORDING_START_MS, 0L) ?: 0L
         createChannel(context)
         loadQuotes(context)
     }
@@ -71,6 +76,7 @@ object IslandHelper {
 
         if (isRecording && recordingStartTimeMs == 0L) {
             recordingStartTimeMs = System.currentTimeMillis()
+            prefs?.edit()?.putLong(KEY_RECORDING_START_MS, recordingStartTimeMs)?.apply()
         }
 
         val voltageStr = DataConverter.formatVoltage(voltage)
@@ -238,5 +244,6 @@ object IslandHelper {
         notificationManager?.cancel(NOTIFICATION_ID)
         currentQuote = ""
         recordingStartTimeMs = 0L
+        prefs?.edit()?.remove(KEY_RECORDING_START_MS)?.apply()
     }
 }

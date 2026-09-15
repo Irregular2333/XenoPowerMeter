@@ -28,24 +28,24 @@ object DataConverter {
     }
 
     fun formatVoltage(v: Float): String {
-        return String.format("%.2f V", v)
+        return String.format(java.util.Locale.US, "%.2f V", v)
     }
 
     fun formatCurrent(ua: Float): String {
         val abs = kotlin.math.abs(ua)
         return when {
-            abs >= 1_000_000f -> String.format("%.2f A", ua / 1_000_000f)
-            abs >= 1_000f -> String.format("%.2f mA", ua / 1_000f)
-            abs >= 1f -> String.format("%.2f \u03BCA", ua)
-            else -> String.format("%.2f nA", ua * 1000f)
+            abs >= 1_000_000f -> String.format(java.util.Locale.US, "%.2f A", ua / 1_000_000f)
+            abs >= 1_000f -> String.format(java.util.Locale.US, "%.2f mA", ua / 1_000f)
+            abs >= 1f -> String.format(java.util.Locale.US, "%.2f \u03BCA", ua)
+            else -> String.format(java.util.Locale.US, "%.2f nA", ua * 1000f)
         }
     }
 
     fun formatPower(watts: Float): String {
         val abs = kotlin.math.abs(watts)
         return when {
-            abs >= 1.0f -> String.format("%.2f W", watts)
-            else -> String.format("%.2f mW", watts * 1000f)
+            abs >= 1.0f -> String.format(java.util.Locale.US, "%.2f W", watts)
+            else -> String.format(java.util.Locale.US, "%.2f mW", watts * 1000f)
         }
     }
 }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.Calibration
 import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.data.usb.ProtocolParser
@@ -192,7 +193,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             autoConnectPending = false
             viewModelScope.launch(Dispatchers.Main) {
                 _isConnected.value = true
-                _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_connected))
+                _connectionEvents.send(appString(R.string.event_connected))
             }
             loadCalibration()
         }
@@ -272,6 +273,10 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                     windowScratch.reverse()
 
                     _waveformData.value = lttbDownsample(windowScratch, 200)
+
+                    // Release any excess internal array capacity that grew
+                    // during a large visible window.
+                    windowScratch.trimToSize()
                 }
 
                 if (now - lastValuePanelUpdateTimeMs >= valuePanelUpdateIntervalMs) {
@@ -304,7 +309,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.Main) {
             recorder.failed.collect { failed ->
                 if (failed) {
-                    _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.recording_lost))
+                    _connectionEvents.send(appString(R.string.recording_lost))
                 }
             }
         }
@@ -353,7 +358,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             usbManager.requestPermission(device)
         } else {
             viewModelScope.launch(Dispatchers.Main) {
-                _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_no_device))
+                _connectionEvents.send(appString(R.string.event_no_device))
             }
         }
     }
@@ -398,7 +403,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         usbManager.disconnect()
         _isConnected.value = false
         viewModelScope.launch(Dispatchers.Main) {
-            _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.event_disconnected))
+            _connectionEvents.send(appString(R.string.event_disconnected))
         }
     }
 
@@ -449,7 +454,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                 recorder.start(File(ctx.filesDir, "recordings"))
                 if (!recorder.isRecording.value) {
                     Log.e(TAG, "recording start failed")
-                    _connectionEvents.send(appString(com.irregular.xenopowermeter.R.string.recording_start_failed))
+                    _connectionEvents.send(appString(R.string.recording_start_failed))
                     return@launch
                 }
                 if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {

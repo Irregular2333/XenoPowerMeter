@@ -48,6 +48,11 @@
     <string name="japanese">日本語</string>
     <string name="always_light">Always Light</string>
     <string name="always_dark">Always Dark</string>
+    <string name="chart_scale_mode">Chart Scale</string>
+    <string name="chart_scale_auto">Auto</string>
+    <string name="chart_scale_full_range">Full Range</string>
+    <string name="recording_duration_limit">Recording Limit</string>
+    <string name="recording_duration_value">%d min</string>
 
     <!-- Range Mode -->
     <string name="range_auto">Auto</string>
@@ -97,6 +102,7 @@
     <string name="export_need_pause">Please stop recording before exporting</string>
     <string name="clear_confirm_title">Clear Data</string>
     <string name="clear_confirm_message">Are you sure you want to clear all recording data?</string>
+    <string name="clear_recorded_data_confirm">Clear all recorded data? This cannot be undone.</string>
     <string name="confirm_clear">Confirm Clear</string>
     <string name="cancel">Cancel</string>
     <string name="close">Close</string>
@@ -108,7 +114,7 @@
     <string name="build_date">Build Date</string>
     <string name="changelog">Changelog</string>
     <string name="changelog_title">Changelog</string>
-    <string name="changelog_content">- Further optimized APK size\n- Improved app stability and fluidity\n- Improved data recording stability\n- Improved multi-language stability\n- Fixed occasional data loss during recording</string>
+    <string name="changelog_content">- Added chart scale function\n- Added recording duration limit\n- Improved application stability\n- Optimized device page logic</string>
     <string name="github">GitHub</string>
     <string name="author_label">Author</string>
     <string name="special_thanks">Special Thanks</string>

@@ -38,4 +38,14 @@ data class CmdResponse(
     companion object {
         const val STATUS_OK = 0
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CmdResponse) return false
+        return status == other.status && payload.contentEquals(other.payload)
+    }
+
+    override fun hashCode(): Int {
+        return 31 * status + payload.contentHashCode()
+    }
 }

@@ -64,6 +64,7 @@ class UsbCdcManager(private val context: Context) {
         }
     )
 
+    @Volatile
     private var isConnected = false
 
     var onConnected: (() -> Unit)? = null
@@ -90,6 +91,7 @@ class UsbCdcManager(private val context: Context) {
                         } else {
                             Log.w(TAG, "USB permission denied")
                             onError?.invoke(context.getString(R.string.event_permission_denied))
+                            unregisterReceiver()
                         }
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -315,6 +317,15 @@ class UsbCdcManager(private val context: Context) {
         handleDisconnect()
     }
 
+    private fun unregisterReceiver() {
+        if (receiverRegistered) {
+            try {
+                context.unregisterReceiver(usbReceiver)
+            } catch (_: Exception) {}
+            receiverRegistered = false
+        }
+    }
+
     /** Idempotent: broadcast, read-loop failure and manual disconnect all funnel here once. */
     private fun handleDisconnect() {
         if (!disconnectHandled.compareAndSet(false, true)) return
@@ -336,12 +347,7 @@ class UsbCdcManager(private val context: Context) {
                 portToClose?.close()
             } catch (_: Exception) {}
         }
-        if (receiverRegistered) {
-            try {
-                context.unregisterReceiver(usbReceiver)
-            } catch (_: Exception) {}
-            receiverRegistered = false
-        }
+        unregisterReceiver()
         onDisconnected?.invoke()
     }
 

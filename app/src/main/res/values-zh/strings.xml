@@ -48,6 +48,11 @@
     <string name="japanese">日本語</string>
     <string name="always_light">始终浅色</string>
     <string name="always_dark">始终深色</string>
+    <string name="chart_scale_mode">图表缩放</string>
+    <string name="chart_scale_auto">自动</string>
+    <string name="chart_scale_full_range">全量程</string>
+    <string name="recording_duration_limit">记录时长上限</string>
+    <string name="recording_duration_value">%d 分钟</string>
 
     <!-- Range Mode -->
     <string name="range_auto">自动</string>
@@ -87,6 +92,7 @@
     <string name="export_need_pause">请先停止记录再导出</string>
     <string name="clear_confirm_title">清除数据</string>
     <string name="clear_confirm_message">确定要清除所有录制数据吗？</string>
+    <string name="clear_recorded_data_confirm">确定要清除所有已记录的数据吗？此操作不可撤销。</string>
     <string name="confirm_clear">确认清除</string>
     <string name="cancel">取消</string>
     <string name="close">关闭</string>
@@ -98,7 +104,7 @@
     <string name="build_date">编译日期</string>
     <string name="changelog">更新日志</string>
     <string name="changelog_title">更新日志</string>
-    <string name="changelog_content">- 进一步优化apk包体存储\n- 优化了应用的稳定性和流畅度\n- 优化了记录数据功能的稳定性\n- 优化了应用的多语言稳定性\n- 修复记录时偶现丢失数据的问题</string>
+    <string name="changelog_content">- 新增图表缩放功能\n- 新增数据记录时长上限\n- 优化了应用的稳定性\n- 优化了设备页面的逻辑</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">特别感谢</string>

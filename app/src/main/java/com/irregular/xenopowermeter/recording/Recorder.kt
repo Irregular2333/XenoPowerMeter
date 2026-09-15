@@ -31,8 +31,6 @@ class Recorder {
     private var totalEntries = 0
     private var lastElapsed = 0.0
 
-    private val entryBuffer = ByteBuffer.allocate(ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-
     var startMillis: Long = 0L
         private set
     var endMillis: Long = 0L
@@ -53,6 +51,7 @@ class Recorder {
     private val _duration = MutableStateFlow(0.0)
     val duration: StateFlow<Double> = _duration.asStateFlow()
 
+    @Synchronized
     fun start(recordingsDir: File) {
         _failed.value = false
         closeStream()
@@ -90,6 +89,7 @@ class Recorder {
         }
     }
 
+    @Synchronized
     fun stop() {
         endMillis = System.currentTimeMillis()
         closeStream()
@@ -102,6 +102,8 @@ class Recorder {
      * Called once per sample (10 kHz) from the collector coroutine — the only
      * writer. Timestamps come from the firmware's µs uptime counter so USB
      * packet gaps don't stretch the recorded timeline.
+     *
+     * Automatically stops recording when the 30-minute duration limit is reached.
      */
     fun addSample(voltage: Float, current: Float, deviceTimestampUs: Long) {
         val dos = stream ?: return
@@ -113,8 +115,18 @@ class Recorder {
             (System.nanoTime() - fallbackStartNs) / 1_000_000_000.0
         }
 
+        // Enforce recording duration limit from settings
+        val limitMs = com.irregular.xenopowermeter.AppSettings.recordingDurationLimitMin * 60L * 1000
+        if (elapsed * 1000.0 > limitMs) {
+            Log.i(TAG, "recording duration limit reached (${limitMs / 1000}s)")
+            stop()
+            _failed.value = true
+            return
+        }
+
+        // Local buffer avoids shared mutable state across threads.
+        val entryBuffer = ByteBuffer.allocate(ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         try {
-            entryBuffer.rewind()
             entryBuffer.putDouble(elapsed)
             entryBuffer.putFloat(voltage)
             entryBuffer.putFloat(current)
@@ -192,9 +204,28 @@ class Recorder {
         writer.flush()
     }
 
+    /** Deletes the temp recording file and resets all counters. */
+    @Synchronized
+    fun clearRecording() {
+        closeStream()
+        file?.delete()
+        file = null
+        totalEntries = 0
+        lastElapsed = 0.0
+        firstDeviceTimestampUs = -1L
+        fallbackStartNs = 0L
+        startMillis = 0L
+        endMillis = 0L
+        _entryCount.value = 0
+        _duration.value = 0.0
+        _failed.value = false
+    }
+
     private fun closeStream() {
         try {
             stream?.flush()
+        } catch (_: Exception) {}
+        try {
             stream?.close()
         } catch (_: Exception) {}
         stream = null

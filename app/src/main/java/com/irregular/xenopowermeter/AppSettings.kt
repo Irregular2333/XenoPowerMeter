@@ -17,11 +17,17 @@ object AppSettings {
     private const val KEY_AUTO_CONNECT = "auto_connect"
     private const val KEY_RANGE = "range_name"
     private const val KEY_RANGE_LEGACY = "range"
+    private const val KEY_CHART_SCALE_MODE = "chart_scale_mode"
+    private const val KEY_RECORDING_DURATION_LIMIT = "recording_duration_limit"
 
     enum class Language { SYSTEM, CHINESE, ENGLISH, JAPANESE }
     enum class ColorMode { SYSTEM, LIGHT, DARK }
+    enum class ChartScaleMode { AUTO, FULL_RANGE }
+
+    val RECORDING_DURATION_OPTIONS = listOf(1, 5, 10, 15, 20, 25, 30)
 
     private var prefs: SharedPreferences? = null
+    private var initialized = false
 
     var language by mutableStateOf(Language.SYSTEM)
         private set
@@ -33,14 +39,22 @@ object AppSettings {
         private set
     var range by mutableStateOf(RangeMode.AUTO)
         private set
+    var chartScaleMode by mutableStateOf(ChartScaleMode.AUTO)
+        private set
+    var recordingDurationLimitMin by mutableStateOf(5)
+        private set
 
     fun init(context: Context) {
+        if (initialized) return
+        initialized = true
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         language = loadEnum(KEY_LANGUAGE, KEY_LANGUAGE_LEGACY, Language.values(), Language.SYSTEM)
         colorMode = loadEnum(KEY_COLOR_MODE, KEY_COLOR_MODE_LEGACY, ColorMode.values(), ColorMode.SYSTEM)
         notificationEnabled = prefs?.getBoolean(KEY_NOTIFICATION_ENABLED, true) ?: true
         autoConnect = prefs?.getBoolean(KEY_AUTO_CONNECT, true) ?: true
         range = loadEnum(KEY_RANGE, KEY_RANGE_LEGACY, RangeMode.values(), RangeMode.AUTO)
+        chartScaleMode = loadEnum(KEY_CHART_SCALE_MODE, KEY_CHART_SCALE_MODE, ChartScaleMode.values(), ChartScaleMode.AUTO)
+        recordingDurationLimitMin = prefs?.getInt(KEY_RECORDING_DURATION_LIMIT, 5) ?: 5
     }
 
     /** Persist enums by name so inserting/reordering entries can't shift saved values. */
@@ -94,5 +108,15 @@ object AppSettings {
     fun updateRange(mode: RangeMode) {
         range = mode
         prefs?.edit()?.putString(KEY_RANGE, mode.name)?.remove(KEY_RANGE_LEGACY)?.apply()
+    }
+
+    fun updateChartScaleMode(mode: ChartScaleMode) {
+        chartScaleMode = mode
+        prefs?.edit()?.putString(KEY_CHART_SCALE_MODE, mode.name)?.apply()
+    }
+
+    fun updateRecordingDurationLimit(minutes: Int) {
+        recordingDurationLimitMin = minutes
+        prefs?.edit()?.putInt(KEY_RECORDING_DURATION_LIMIT, minutes)?.apply()
     }
 }

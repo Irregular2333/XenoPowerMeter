@@ -5,3 +5,7 @@
 # Compose stack). Add targeted rules here only if a release build actually
 # breaks at runtime.
 -dontwarn com.hoho.android.usbserial.**
+
+# Data model classes are used with kotlinx.serialization-like patterns
+# and ByteArray content comparison; keep them to avoid R8 field mangling.
+-keep class com.irregular.xenopowermeter.data.model.** { *; }

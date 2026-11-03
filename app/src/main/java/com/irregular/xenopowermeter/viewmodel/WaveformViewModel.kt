@@ -12,7 +12,6 @@ import com.irregular.xenopowermeter.data.usb.ProtocolParser
 import com.irregular.xenopowermeter.data.usb.UsbCdcManager
 import com.irregular.xenopowermeter.notification.IslandHelper
 import com.irregular.xenopowermeter.recording.Recorder
-import com.irregular.xenopowermeter.recording.RecordingService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -442,9 +441,6 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                 recorder.stop()
                 if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
                     IslandHelper.cancelNotification(ctx)
-                    ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
-                        action = RecordingService.ACTION_STOP
-                    })
                 }
             }
         } else {
@@ -466,9 +462,6 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                         avgPower = _averagePower.value,
                         isRecording = true
                     )
-                    ctx.startForegroundService(Intent(ctx, RecordingService::class.java).apply {
-                        action = RecordingService.ACTION_START
-                    })
                 }
             }
         }
@@ -490,9 +483,6 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             recorder.stop()
             if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
                 IslandHelper.cancelNotification(ctx)
-                ctx.stopService(Intent(ctx, RecordingService::class.java).apply {
-                    action = RecordingService.ACTION_STOP
-                })
             }
         }
         usbManager.disconnect()

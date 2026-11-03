@@ -1,11 +1,13 @@
 package com.irregular.xenopowermeter.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -55,8 +57,22 @@ fun XenoPowerMeterTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
+    // Replace the platform stretch with a translation-only rubber band: the
+    // stretch re-records the content into a RenderNode every frame, and the
+    // glass surfaces' backdrop snapshots do not survive that cleanly (the pill
+    // blinks when the stretch snaps back). A translation leaves the snapshot
+    // No overscroll effect at all: lists and the pager stop dead at their
+    // edges — no rubber band, no stretch. The platform stretch (the default)
+    // re-records the content into a RenderNode every frame, and the glass
+    // surfaces' backdrop snapshots do not survive that cleanly (the pill
+    // blinks when the stretch snaps back); the translation-only bounce that
+    // replaced it was removed later as a deliberate flatness choice — null
+    // keeps both effects out while leaving BouncyOverscroll in the tree for
+    // reference.
+    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            content = content
+        )
+    }
 }

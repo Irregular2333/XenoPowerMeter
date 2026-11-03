@@ -104,7 +104,7 @@
     <string name="build_date">ビルド日</string>
     <string name="changelog">更新履歴</string>
     <string name="changelog_title">更新履歴</string>
-    <string name="changelog_content">- チャートスケール機能を追加\n- 記録時間上限を追加\n- アプリの安定性を改善\n- デバイスページのロジックを最適化</string>
+    <string name="changelog_content">- アプリの表示を改善\n- タブレット向けレイアウトを最適化\n- リキッドボトムバーとプログレッシブブラーに対応\n- グラフのグリッド表示の問題を修正</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">スペシャルサンクス</string>
@@ -115,9 +115,6 @@
     <string name="github_liquid_glass">Android Liquid Glass</string>
     <string name="jrpg_thanks">大学生活を彩ったJRPGたち</string>
     <string name="and_also">そして</string>
-    <string name="recording_channel_name">データ記録</string>
-    <string name="recording_channel_description">データを記録中</string>
-    <string name="recording_notification_text">記録中...</string>
     <string name="island_open_app">アプリを開く</string>
     <string name="island_channel_name">リアルタイム計測</string>
     <string name="island_channel_description">リアルタイムの計測値を表示します</string>
@@ -125,4 +122,8 @@
     <string name="island_status_monitoring">モニタリング中</string>
     <string name="island_voltage_label">電圧</string>
     <string name="island_current_label">電流</string>
+    <!-- Bottom navigation -->
+    <string name="nav_home">ホーム</string>
+    <string name="nav_settings">設定</string>
+    <string name="nav_about">情報</string>
 </resources>

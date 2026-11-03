@@ -104,7 +104,7 @@
     <string name="build_date">编译日期</string>
     <string name="changelog">更新日志</string>
     <string name="changelog_title">更新日志</string>
-    <string name="changelog_content">- 新增图表缩放功能\n- 新增数据记录时长上限\n- 优化了应用的稳定性\n- 优化了设备页面的逻辑</string>
+    <string name="changelog_content">- 优化了应用的显示效果\n- 优化了平板端的布局\n- 新增适配液态底栏和渐进模糊\n- 修复了网格图显示异常的问题</string>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">特别感谢</string>
@@ -115,9 +115,6 @@
     <string name="github_liquid_glass">Android Liquid Glass</string>
     <string name="jrpg_thanks">陪伴我大学生活的JRPG们</string>
     <string name="and_also">以及</string>
-    <string name="recording_channel_name">数据录制</string>
-    <string name="recording_channel_description">数据录制进行中</string>
-    <string name="recording_notification_text">数据录制中...</string>
     <string name="island_open_app">打开应用</string>
     <string name="island_channel_name">功率计实时状态</string>
     <string name="island_channel_description">实时功率测量更新</string>
@@ -125,4 +122,8 @@
     <string name="island_status_monitoring">监控中</string>
     <string name="island_voltage_label">电压</string>
     <string name="island_current_label">电流</string>
+    <!-- Bottom navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_about">关于</string>
 </resources>

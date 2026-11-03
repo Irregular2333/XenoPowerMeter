@@ -32,7 +32,7 @@
 
 | <div align="center">桌面</div> | <div align="center">桌面展开大卡片</div> |
 |----------|----------|
-| <img src="./screenshots/HyperIsland_Desktop.png" height="500"> | <img src="./screenshots/HyperIsland_Desktop_Expand.png" height="500"> |
+| <img src="./screenshots/HyperIsland_Desktop.jpg" height="500"> | <img src="./screenshots/HyperIsland_Desktop_Expand.jpg" height="500"> |
 | <div align="center"><strong>通知中心卡片</strong></div> | <div align="center"><strong>锁屏卡片</strong></div> |
 | <img src="./screenshots/HyperIsland_Notification_Center.jpg" height="500"> | <img src="./screenshots/HyperIsland_Lockscreen.jpg" height="500"> |
 
@@ -40,13 +40,17 @@
 
 ```
 app/src/main/java/com/irregular/xenopowermeter/
-├── MainActivity.kt                     // 应用入口(单Activity+语言热切换)
-├── AppSettings.kt                      // 应用设置(语言/主题/通知/自动连接)
+├── MainActivity.kt                     // 应用入口
+├── AppSettings.kt                      // 应用设置
 ├── ui/
+│   ├── BottomInset.kt                  // 底栏/侧边导轨尺寸常量
+│   ├── LiquidBar.kt                    // 液态底栏组件
+│   ├── ProgressiveBlur.kt              // 渐进模糊效果
+│   ├── BouncyOverscroll.kt             // 弹性回弹效果(当前已停用)
 │   ├── main/
-│   │   └── MainScreen.kt               // 主界面(波形图/数值面板/按钮栏)
+│   │   └── MainScreen.kt               // 主界面
 │   ├── settings/
-│   │   └── SettingsScreen.kt           // 设置页(显示/数据记录/校准)
+│   │   └── SettingsScreen.kt           // 设置页
 │   ├── about/
 │   │   └── AboutScreen.kt              // 关于页
 │   ├── navigation/
@@ -69,10 +73,9 @@ app/src/main/java/com/irregular/xenopowermeter/
 │   └── converter/
 │       └── DataConverter.kt            // 数据格式化(电压/电流/功率显示)
 ├── recording/
-│   ├── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
-│   └── RecordingService.kt             // 录制前台服务(保活通知)
+│   └── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
 └── notification/
-    └── IslandHelper.kt                 // 小米HyperOS 超级岛适配
+    └── IslandHelper.kt                 // 小米HyperOS超级岛适配
 ```
 
 ## 特别感谢：

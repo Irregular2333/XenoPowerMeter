@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -19,13 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -41,7 +39,14 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
+import com.irregular.xenopowermeter.ui.BottomBarTopEdge
+import com.irregular.xenopowermeter.ui.PageEndGutter
+import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
+import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
+import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.theme.AppColors
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 private val dimColorMatrix = ColorMatrix(
     floatArrayOf(
@@ -80,10 +85,10 @@ fun AboutScreen() {
     }
 
     val scrollState = rememberScrollState()
-    val backgroundColor = MaterialTheme.colorScheme.background
+    val imageHeightDp = (screenHeightDp * 0.3f).dp
 
-    // The top fade dissolves away once the list rests at the very top (the
-    // content then starts right below the image with nothing to wash), and
+    // The band dissolves away once the list rests at the very top (the first
+    // section then starts well below the image with nothing to dissolve), and
     // returns as soon as content slides underneath the pinned image.
     val topObscured by remember {
         derivedStateOf { scrollState.value > 0 }
@@ -93,35 +98,115 @@ fun AboutScreen() {
         animationSpec = tween(durationMillis = 200)
     )
 
-    // The bottom fade dissolves away (200ms) once the list rests at the very
-    // bottom — nothing left to wash there — and returns on scrolling up.
-    val bottomObscured by remember {
-        derivedStateOf { scrollState.value < scrollState.maxValue }
-    }
-    val bottomFadeAlpha by animateFloatAsState(
-        targetValue = if (bottomObscured) 1f else 0f,
-        animationSpec = tween(durationMillis = 200)
-    )
-
     if (isLandscape) {
         LandscapeAboutLayout(
             scrollState = scrollState,
             topFadeAlpha = topFadeAlpha,
-            bottomFadeAlpha = bottomFadeAlpha,
-            backgroundColor = backgroundColor,
-            darkTheme = darkTheme,
-            context = context,
-            screenHeightDp = screenHeightDp
+            imageHeightDp = imageHeightDp,
+            context = context
         )
     } else {
         PortraitAboutLayout(
             scrollState = scrollState,
             topFadeAlpha = topFadeAlpha,
-            bottomFadeAlpha = bottomFadeAlpha,
-            backgroundColor = backgroundColor,
-            darkTheme = darkTheme,
-            context = context,
-            screenHeightDp = screenHeightDp
+            imageHeightDp = imageHeightDp,
+            context = context
+        )
+    }
+}
+
+/**
+ * Shared chrome for both orientations: the scrolling column, the two blur
+ * bands and the pinned header image.
+ *
+ * The page's range is not the screen's: the top [imageHeightDp] belongs to the
+ * pinned photo, which is drawn *over* the column. So the top band is anchored
+ * to the image's bottom edge rather than to y = 0 — anchored at the screen top
+ * it would only blur the photo and leave the content underneath it untouched.
+ */
+@Composable
+private fun AboutPage(
+    scrollState: androidx.compose.foundation.ScrollState,
+    topFadeAlpha: Float,
+    imageHeightDp: androidx.compose.ui.unit.Dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    // Snapshot of the scrolling column alone (the image is not part of it), so
+    // the bands sample page content and never the photo they sit next to.
+    val pageBackdrop = rememberLayerBackdrop()
+
+    // Landscape puts the bar on the start edge, so the cards clear it
+    // sideways and the bottom is free again. Same shared start edge as Main
+    // and Settings.
+    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    val contentStart = if (isLandscape) RailPageStart else 16.dp
+
+    // Same rest space as Settings: the last card stops right at the band's top
+    // edge instead of sinking into it and staying blurred at full scroll.
+    val bottomRestSpace = if (isLandscape) 16.dp else BottomBarTopEdge + 8.dp
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(pageBackdrop)
+                .verticalScroll(scrollState)
+        ) {
+            // Content starts below the pinned header image and slides under
+            // it when scrolling up.
+            Spacer(modifier = Modifier.height(imageHeightDp + 16.dp))
+
+            Column(
+                modifier = Modifier.padding(start = contentStart, end = PageEndGutter),
+                content = content
+            )
+
+            Spacer(modifier = Modifier.height(bottomRestSpace))
+        }
+
+        // Same band as the Settings page, for the floating bar that hangs over
+        // this page too. With the bar on the side there is nothing to dissolve
+        // into down here.
+        if (!isLandscape) {
+            ProgressiveBottomBlur(
+                backdrop = pageBackdrop,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                bandHeight = BottomBarTopEdge + 10.dp,
+                maxBlur = 20.dp
+            )
+        }
+
+        // Hung off the image's bottom edge, at the same strength: content
+        // dissolves into the photo instead of colliding with its hard edge.
+        //
+        // 76dp, not the Settings band's ~92dp: that one has the status bar's
+        // dead zone folded into it, this one starts at a real edge, and a
+        // ramp that long would smear the two rows that still matter on a page
+        // whose whole travel is about 44dp.
+        ProgressiveTopBlur(
+            backdrop = pageBackdrop,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = imageHeightDp)
+                .graphicsLayer { alpha = topFadeAlpha },
+            bandHeight = 76.dp,
+            maxBlur = 20.dp
+        )
+
+        // In landscape the photo joins the content grid: it starts on the same
+        // x as the cards and keeps the same trailing gutter, with the cards'
+        // rounded corner, so the header reads as the first card of the column
+        // instead of a full-bleed strip pinned to the screen's left edge.
+        // Portrait stays edge-to-edge.
+        AboutHeaderImage(
+            imageHeightDp,
+            if (isLandscape) {
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = contentStart, end = PageEndGutter)
+            } else {
+                Modifier.align(Alignment.TopCenter)
+            }
         )
     }
 }
@@ -130,50 +215,19 @@ fun AboutScreen() {
 private fun PortraitAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
     topFadeAlpha: Float,
-    bottomFadeAlpha: Float,
-    backgroundColor: Color,
-    darkTheme: Boolean,
-    context: android.content.Context,
-    screenHeightDp: Int
+    imageHeightDp: androidx.compose.ui.unit.Dp,
+    context: android.content.Context
 ) {
-    val imageHeightDp = (screenHeightDp * 0.3f).dp
-    // Lets the last section rest 8dp above the floating bar at full scroll,
-    // matching the Settings page (About's viewport has no bottom padding).
-    val bottomRestSpace = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
-        .asPaddingValues().calculateBottomPadding() + 68.dp
+    AboutPage(scrollState, topFadeAlpha, imageHeightDp) {
+        VersionInfoSection()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-        ) {
-            // Content starts below the pinned header image and slides under
-            // it when scrolling up.
-            Spacer(modifier = Modifier.height(imageHeightDp + 16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                VersionInfoSection()
+        AuthorSection(context)
 
-                Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-                AuthorSection(context)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                SpecialThanksSection(context)
-            }
-
-            Spacer(modifier = Modifier.height(bottomRestSpace))
-        }
-
-        TopFadeGradient(topFadeAlpha, imageHeightDp, backgroundColor)
-
-        AboutHeaderImage(imageHeightDp, Modifier.align(Alignment.TopCenter))
-
-        FadeGradient(bottomFadeAlpha, backgroundColor)
+        SpecialThanksSection(context)
     }
 }
 
@@ -181,64 +235,33 @@ private fun PortraitAboutLayout(
 private fun LandscapeAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
     topFadeAlpha: Float,
-    bottomFadeAlpha: Float,
-    backgroundColor: Color,
-    darkTheme: Boolean,
-    context: android.content.Context,
-    screenHeightDp: Int
+    imageHeightDp: androidx.compose.ui.unit.Dp,
+    context: android.content.Context
 ) {
-    val imageHeightDp = (screenHeightDp * 0.3f).dp
-    // Lets the last section rest 8dp above the floating bar at full scroll,
-    // matching the Settings page. No inner vertical padding here — the
-    // portrait layout has none either, and the extra 8dp used to make the
-    // landscape bottom whitespace visibly larger than Settings'.
-    val bottomRestSpace = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
-        .asPaddingValues().calculateBottomPadding() + 68.dp
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
+    AboutPage(scrollState, topFadeAlpha, imageHeightDp) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(imageHeightDp + 16.dp))
-
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        DisplaySectionTitle(stringResource(R.string.version_info))
-                        VersionInfoCard()
+                DisplaySectionTitle(stringResource(R.string.version_info))
+                VersionInfoCard()
 
-                        DisplaySectionTitle(stringResource(R.string.author_label))
-                        AuthorCard(context)
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        DisplaySectionTitle(stringResource(R.string.special_thanks))
-                        SpecialThanksCard(context)
-                    }
-                }
+                DisplaySectionTitle(stringResource(R.string.author_label))
+                AuthorCard(context)
             }
 
-            Spacer(modifier = Modifier.height(bottomRestSpace))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DisplaySectionTitle(stringResource(R.string.special_thanks))
+                SpecialThanksCard(context)
+            }
         }
-
-        TopFadeGradient(topFadeAlpha, imageHeightDp, backgroundColor)
-
-        AboutHeaderImage(imageHeightDp, Modifier.align(Alignment.TopCenter))
-
-        FadeGradient(bottomFadeAlpha, backgroundColor)
     }
 }
 
@@ -526,67 +549,9 @@ private fun SpecialThanksCard(context: android.content.Context) {
     }
 }
 
-/**
- * The bottom fade covers the whole floating bar and spills 0.5 × a above it,
- * where a = distance from the bar's vertical center to the screen bottom
- * (nav inset + 4dp gap + half of the 56dp bar) — so the wash visibly climbs
- * over the content above the bar.
- */
-private val BottomFadeSpillFactor = 0.5f
-private val BottomFadeFixedDistance = 32.dp
-
-// Same strength as the Settings page's top fade (64dp, background →
-// transparent), but hung right below the pinned header image's bottom edge
-// instead of the screen top: content sliding under the image dissolves out
-// instead of colliding with the image edge and the status bar.
-@Composable
-private fun BoxScope.TopFadeGradient(topFadeAlpha: Float, imageHeightDp: androidx.compose.ui.unit.Dp, backgroundColor: Color) {
-    if (topFadeAlpha > 0f) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = imageHeightDp)
-                .height(64.dp)
-                .alpha(topFadeAlpha)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(backgroundColor, Color.Transparent)
-                    )
-                )
-        )
-    }
-}
-
-@Composable
-private fun BoxScope.FadeGradient(bottomFadeAlpha: Float, backgroundColor: Color) {
-    if (bottomFadeAlpha > 0f) {
-        // Fade = full bar zone + spill above it: nav inset + (4dp gap + 56dp
-        // bar) + 0.5 × a, a = bar vertical center → screen bottom. Identical
-        // to the Settings page's bottom fade; dissolves away once the list
-        // rests at the very bottom.
-        val navBottomInset = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
-            .asPaddingValues().calculateBottomPadding()
-        val fadeHeight = navBottomInset + 60.dp +
-            (navBottomInset + BottomFadeFixedDistance) * BottomFadeSpillFactor
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(fadeHeight)
-                .align(Alignment.BottomCenter)
-                .alpha(bottomFadeAlpha)
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0f to Color.Transparent,
-                            0.25f to backgroundColor.copy(alpha = 0.7f),
-                            0.5f to backgroundColor
-                        )
-                    )
-                )
-        )
-    }
-}
-
+// The old background-coloured ramp that used to sit below the image is gone:
+// the top band now blurs the content itself, so a solid wash on top of it
+// would only hide what the blur is there to show.
 @Composable
 private fun ThanksRow(
     label: String,

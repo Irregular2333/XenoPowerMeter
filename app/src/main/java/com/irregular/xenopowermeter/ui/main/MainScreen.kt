@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irregular.xenopowermeter.R
+import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.data.converter.DataConverter
 import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
@@ -54,7 +55,17 @@ fun MainScreen(viewModel: WaveformViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)) {
+        // In landscape the pager page already reserves the rail and applies the
+        // shared gutters (MainActivity → RailPageStart), so the screen must not
+        // add its own on top or the value card would sit 8dp further in than the
+        // Settings/About columns. Portrait keeps the original 8dp.
+        val edgeGutter = if (isLandscape) 0.dp else 8.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(start = edgeGutter, end = edgeGutter, top = 4.dp, bottom = 8.dp)
+        ) {
             // ValuePanel and WaveformChart collect their own high-frequency
             // state (1Hz values / 4Hz waveform) internally, so those updates
             // recompose only their subtrees — never the button bar or the
@@ -333,11 +344,13 @@ fun WaveformChart(
     val isLandscape = screenWidth > screenHeight
     val numTimeTicks = if (isLandscape) 8 else 5
 
-    val windowEnd = if (data.isNotEmpty()) data.last().third else 0L
+    val windowEnd = if (data.isNotEmpty()) data.last().third else visibleTimeMs
     val windowStart = windowEnd - visibleTimeMs
 
-    val niceRange = remember(data) {
-        if (data.isEmpty()) {
+    val niceRange = remember(data, AppSettings.chartScaleMode) {
+        if (AppSettings.chartScaleMode == AppSettings.ChartScaleMode.FULL_RANGE) {
+            NiceAxisRange(0f, 33f, 5f, 7) to NiceAxisRange(0f, 12_000_000f, 2_000_000f, 6)
+        } else if (data.isEmpty()) {
             NiceAxisRange(0f, 1f, 0.1f, 10) to NiceAxisRange(0f, 1000f, 200f, 5)
         } else {
             val vDataMin = data.minOf { it.first }
@@ -447,8 +460,6 @@ fun WaveformChart(
                     )
                 }
 
-                if (data.isEmpty()) return@Canvas
-
                 val numTimeTicksLocal = numTimeTicks
 
                 for (i in 0..numTimeTicksLocal) {
@@ -457,12 +468,19 @@ fun WaveformChart(
                     val timeMs = windowStart + (fraction * visibleTimeMs).toLong()
                     drawContext.canvas.nativeCanvas.drawLine(x, chartTop, x, chartBottom, gridPaint)
                     val totalSec = timeMs / 1000
-                    val min = totalSec / 60
-                    val sec = totalSec % 60
+                    // Sub-minute windows show plain seconds ("0s".."8s");
+                    // longer windows use "1m30s" style.
+                    val timeLabel = if (visibleTimeMs < 60_000L) {
+                        String.format("%ds", totalSec)
+                    } else {
+                        String.format("%dm%02ds", totalSec / 60, totalSec % 60)
+                    }
                     drawContext.canvas.nativeCanvas.drawText(
-                        String.format("%d:%02ds", min, sec), x - 7.dp.toPx(), chartBottom + (bottomPad - 4.dp.toPx()), timePaint
+                        timeLabel, x - 7.dp.toPx(), chartBottom + (bottomPad - 4.dp.toPx()), timePaint
                     )
                 }
+
+                if (data.isEmpty()) return@Canvas
 
                 val voltagePath = Path()
                 val currentPath = Path()

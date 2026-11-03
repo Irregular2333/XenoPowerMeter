@@ -6,8 +6,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,34 +20,32 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration 
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.RangeMode
+import com.irregular.xenopowermeter.ui.BottomBarInset
+import com.irregular.xenopowermeter.ui.BottomBarTopEdge
+import com.irregular.xenopowermeter.ui.BottomBarHeight
+import com.irregular.xenopowermeter.ui.PageEndGutter
+import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
+import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
+import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.theme.AppColors
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
-/**
- * The bottom fade covers the whole floating bar and spills 0.5 × a above it,
- * where a = distance from the bar's vertical center to the screen bottom
- * (nav inset + 4dp gap + half of the 56dp bar) — so the wash visibly climbs
- * over the content above the bar.
- */
-private val BottomFadeSpillFactor = 0.5f
-private val BottomFadeFixedDistance = 32.dp
 
 @Composable
 fun SettingsScreen(viewModel: WaveformViewModel) {
@@ -226,93 +222,110 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
             )
         }
 
-        // Bottom fade: full-bleed with the exact same geometry and stops as
-        // the About page's, so both pages read identically. Fades out with a
-        // short transition once the list rests at the very bottom (nothing
-        // left to wash there), back in as soon as it scrolls away from it.
-        val backgroundColor = MaterialTheme.colorScheme.background
-        val navBottomInset = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
-            .asPaddingValues().calculateBottomPadding()
-        val bottomFadeHeight = navBottomInset + 60.dp +
-            (navBottomInset + BottomFadeFixedDistance) * BottomFadeSpillFactor
-        val bottomObscured by remember {
-            derivedStateOf { settingsScrollState.value < settingsScrollState.maxValue }
-        }
-        val bottomFadeAlpha by animateFloatAsState(
-            targetValue = if (bottomObscured) 1f else 0f,
-            animationSpec = tween(durationMillis = 200)
-        )
-        if (bottomFadeAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(bottomFadeHeight)
-                    .align(Alignment.BottomCenter)
-                    .alpha(bottomFadeAlpha)
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to Color.Transparent,
-                                0.25f to backgroundColor.copy(alpha = 0.7f),
-                                0.5f to backgroundColor
-                            )
-                        )
-                    )
-            )
-        }
-
-        // Keep the snackbar above the floating bottom bar.
-        val bottomBarZone = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
+        // Keep the snackbar clear of the bar — above it in portrait, to the
+        // right of the rail in landscape.
+        val bottomBarZone = BottomBarInset
             .asPaddingValues().calculateBottomPadding() + 60.dp
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomBarZone + 16.dp)
+            modifier = if (isLandscape) {
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = RailPageStart, bottom = 16.dp)
+            } else {
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomBarZone + 16.dp)
+            }
         )
     }
 }
 
 @Composable
-private fun ScrollableWithFadeEdges(
+private fun ScrollableSettingsPage(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val backgroundColor = MaterialTheme.colorScheme.background
+    // Landscape hangs the bar off the start edge, so the space the page has to
+    // clear moves from the bottom to the side, and there is nothing left to
+    // dissolve at the bottom.
+    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    // The three pages share one start edge (rail + gutter in landscape, the
+    // phone's 16dp otherwise). Keep reading it from BottomInset instead of
+    // re-deriving it here: the old "16 + rail + 8" made Settings start 16dp
+    // further in than Main did.
+    val contentStart = if (isLandscape) RailPageStart else 16.dp
 
-    val topAlpha by animateFloatAsState(
-        targetValue = if (scrollState.value > 0) 1f else 0f,
-        animationSpec = tween(durationMillis = 200)
-    )
+    // Last row rests 8dp clear of the pill so it never ends up hidden behind it
+    // (and a plain 16dp from the bottom edge when the pill is on the side).
+    val bottomRestSpace = if (isLandscape) 16.dp else BottomBarTopEdge + 8.dp
 
-    // Lets the last row rest 8dp above the floating bottom bar at full scroll
-    // (the viewport bottom sits 8dp up because of the container's padding).
-    val bottomRestSpace = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
-        .asPaddingValues().calculateBottomPadding() + 60.dp
+    // The status bar gap lives *inside* the scrolling content rather than
+    // around the viewport: at rest the first card still starts below the clock,
+    // but as soon as the page scrolls the rows slide up under the status bar
+    // and into the blur band. With the old statusBarsPadding outside, the top
+    // of the band fell on empty background and its strongest part dissolved
+    // nothing.
+    val statusBarTop = WindowInsets.statusBars
+        .asPaddingValues().calculateTopPadding()
+    val contentTopSpace = statusBarTop + 8.dp
 
-    Box(modifier = modifier) {
+    // Snapshot of just the scrolling column, for the blur band below to read.
+    // It has to sit outside the scroll so it covers the viewport instead of the
+    // whole (much taller) content.
+    val pageBackdrop = rememberLayerBackdrop()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // The bounce is the app-wide translation-only overscroll (see
+        // BouncyOverscroll): it moves the viewport without re-recording the
+        // content into a stretched RenderNode, so the backdrop this page hands
+        // to the glass stays valid from frame to frame.
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .layerBackdrop(pageBackdrop)
                 .verticalScroll(scrollState)
+                .padding(start = contentStart, end = PageEndGutter)
         ) {
+            Spacer(Modifier.height(contentTopSpace))
             content()
             Spacer(Modifier.height(bottomRestSpace))
         }
 
-        if (topAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .align(Alignment.TopCenter)
-                    .alpha(topAlpha)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(backgroundColor, Color.Transparent)
-                        )
-                    )
+        if (!isLandscape) {
+            // Flush with the pill's top edge, so content is still sharp when it
+            // gets there and only dissolves once it is behind the glass.
+            // +10.dp extends the band past the pill's top edge so the dissolve
+            // starts a bit higher (72dp pill-equivalent instead of the real 60dp).
+            ProgressiveBottomBlur(
+                backdrop = pageBackdrop,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                bandHeight = BottomBarTopEdge + 10.dp,
+                maxBlur = 20.dp
             )
         }
+
+        // Top mirror of the bottom band, same parameters: content dissolves
+        // as it scrolls up under the page's top edge.
+        //
+        // Unlike the bottom band there is nothing sitting on top here, so at
+        // rest it would just eat the first row ("语言") while it is still the
+        // page's foremost control. Fade it in over the first 24dp of scroll
+        // instead: sharp at the top of the list, dissolving only once content
+        // actually slides beneath the edge. Read inside graphicsLayer so
+        // scrolling only invalidates the draw phase.
+        val fadeDistancePx = with(LocalDensity.current) { 24.dp.toPx() }
+        ProgressiveTopBlur(
+            backdrop = pageBackdrop,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .graphicsLayer {
+                    alpha = (scrollState.value / fadeDistancePx).coerceIn(0f, 1f)
+                },
+            bandHeight = contentTopSpace + BottomBarHeight,
+            maxBlur = 20.dp
+        )
     }
 }
 
@@ -336,12 +349,9 @@ private fun PortraitSettingsLayout(
     saveCsvLauncher: androidx.activity.result.ActivityResultLauncher<String>,
     generateFileName: (String) -> String
 ) {
-    ScrollableWithFadeEdges(
+    ScrollableSettingsPage(
         scrollState = scrollState,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -384,12 +394,9 @@ private fun LandscapeSettingsLayout(
 ) {
     val valueColor = AppColors.linkColor()
 
-    ScrollableWithFadeEdges(
+    ScrollableSettingsPage(
         scrollState = scrollState,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -638,6 +645,59 @@ private fun CalibrationCard(
     }
 }
 
+/**
+ * A label / value row whose value opens a dropdown.
+ *
+ * The menu is anchored to the 130dp value slot instead of to the whole row. A
+ * row-wide anchor plus the old -80dp nudge parked the popup against the
+ * window's leading edge — which in landscape is exactly where the navigation
+ * rail floats, so opening "Language" dropped the list on top of the glass.
+ * Anchored to the value, the menu opens under the chevron, inside the card.
+ */
+@Composable
+private fun SettingRow(
+    label: String,
+    value: String,
+    labelColor: androidx.compose.ui.graphics.Color,
+    valueColor: androidx.compose.ui.graphics.Color,
+    menu: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .clickable { expanded = true },
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 15.sp, color = labelColor)
+        Box(
+            modifier = Modifier.width(130.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(value, fontSize = 15.sp, color = valueColor)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
+            }
+
+            // Inside the value Box on purpose: the popup positions itself
+            // against its parent layout node, so this is what keeps it on the
+            // page rather than over the rail.
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                menu { expanded = false }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LanguageSetting(
     labelColor: androidx.compose.ui.graphics.Color,
@@ -646,7 +706,6 @@ private fun LanguageSetting(
 ) {
     val context = LocalContext.current
     val langCtx = AppSettings.localizedContext(context)
-    var expanded by remember { mutableStateOf(false) }
     val currentLanguage = AppSettings.language
 
     val languageText = when (currentLanguage) {
@@ -660,69 +719,44 @@ private fun LanguageSetting(
     val enText = langCtx.getString(R.string.english)
     val jaText = langCtx.getString(R.string.japanese)
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clickable { expanded = true },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.language), fontSize = 15.sp, color = labelColor)
-            Box(
-                modifier = Modifier.width(130.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(languageText, fontSize = 15.sp, color = valueColor)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
-                }
+    SettingRow(
+        label = stringResource(R.string.language),
+        value = languageText,
+        labelColor = labelColor,
+        valueColor = valueColor
+    ) { dismiss ->
+        DropdownMenuItem(
+            text = { Text(sysText) },
+            onClick = {
+                AppSettings.updateLanguage(AppSettings.Language.SYSTEM)
+                dismiss()
+                onChanged(langCtx.getString(R.string.language_changed_to_system))
             }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset((-80).dp, 0.dp)
-        ) {
-            DropdownMenuItem(
-                text = { Text(sysText) },
-                onClick = {
-                    AppSettings.updateLanguage(AppSettings.Language.SYSTEM)
-                    expanded = false
-                    onChanged(langCtx.getString(R.string.language_changed_to_system))
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(zhText) },
-                onClick = {
-                    AppSettings.updateLanguage(AppSettings.Language.CHINESE)
-                    expanded = false
-                    onChanged(langCtx.getString(R.string.language_changed_to_chinese))
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(enText) },
-                onClick = {
-                    AppSettings.updateLanguage(AppSettings.Language.ENGLISH)
-                    expanded = false
-                    onChanged(langCtx.getString(R.string.language_changed_to_english))
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(jaText) },
-                onClick = {
-                    AppSettings.updateLanguage(AppSettings.Language.JAPANESE)
-                    expanded = false
-                    onChanged(langCtx.getString(R.string.language_changed_to_japanese))
-                }
-            )
-        }
+        )
+        DropdownMenuItem(
+            text = { Text(zhText) },
+            onClick = {
+                AppSettings.updateLanguage(AppSettings.Language.CHINESE)
+                dismiss()
+                onChanged(langCtx.getString(R.string.language_changed_to_chinese))
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(enText) },
+            onClick = {
+                AppSettings.updateLanguage(AppSettings.Language.ENGLISH)
+                dismiss()
+                onChanged(langCtx.getString(R.string.language_changed_to_english))
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(jaText) },
+            onClick = {
+                AppSettings.updateLanguage(AppSettings.Language.JAPANESE)
+                dismiss()
+                onChanged(langCtx.getString(R.string.language_changed_to_japanese))
+            }
+        )
     }
 }
 
@@ -732,7 +766,6 @@ private fun ColorModeSetting(
     valueColor: androidx.compose.ui.graphics.Color,
     onChanged: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val currentMode = AppSettings.colorMode
     val localizedCtx = AppSettings.localizedContext(LocalContext.current)
 
@@ -745,61 +778,36 @@ private fun ColorModeSetting(
     val lightText = localizedCtx.getString(R.string.always_light)
     val darkText = localizedCtx.getString(R.string.always_dark)
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clickable { expanded = true },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.color_mode), fontSize = 15.sp, color = labelColor)
-            Box(
-                modifier = Modifier.width(130.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(modeText, fontSize = 15.sp, color = valueColor)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
-                }
+    SettingRow(
+        label = stringResource(R.string.color_mode),
+        value = modeText,
+        labelColor = labelColor,
+        valueColor = valueColor
+    ) { dismiss ->
+        DropdownMenuItem(
+            text = { Text(systemText) },
+            onClick = {
+                AppSettings.updateColorMode(AppSettings.ColorMode.SYSTEM)
+                dismiss()
+                onChanged()
             }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset((-80).dp, 0.dp)
-        ) {
-            DropdownMenuItem(
-                text = { Text(systemText) },
-                onClick = {
-                    AppSettings.updateColorMode(AppSettings.ColorMode.SYSTEM)
-                    expanded = false
-                    onChanged()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(lightText) },
-                onClick = {
-                    AppSettings.updateColorMode(AppSettings.ColorMode.LIGHT)
-                    expanded = false
-                    onChanged()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(darkText) },
-                onClick = {
-                    AppSettings.updateColorMode(AppSettings.ColorMode.DARK)
-                    expanded = false
-                    onChanged()
-                }
-            )
-        }
+        )
+        DropdownMenuItem(
+            text = { Text(lightText) },
+            onClick = {
+                AppSettings.updateColorMode(AppSettings.ColorMode.LIGHT)
+                dismiss()
+                onChanged()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(darkText) },
+            onClick = {
+                AppSettings.updateColorMode(AppSettings.ColorMode.DARK)
+                dismiss()
+                onChanged()
+            }
+        )
     }
 }
 
@@ -808,7 +816,6 @@ private fun ChartScaleModeSetting(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val currentMode = AppSettings.chartScaleMode
     val localizedCtx = AppSettings.localizedContext(LocalContext.current)
 
@@ -819,51 +826,26 @@ private fun ChartScaleModeSetting(
     val autoText = localizedCtx.getString(R.string.chart_scale_auto)
     val fullRangeText = localizedCtx.getString(R.string.chart_scale_full_range)
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clickable { expanded = true },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.chart_scale_mode), fontSize = 15.sp, color = labelColor)
-            Box(
-                modifier = Modifier.width(130.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(modeText, fontSize = 15.sp, color = valueColor)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
-                }
+    SettingRow(
+        label = stringResource(R.string.chart_scale_mode),
+        value = modeText,
+        labelColor = labelColor,
+        valueColor = valueColor
+    ) { dismiss ->
+        DropdownMenuItem(
+            text = { Text(autoText) },
+            onClick = {
+                AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.AUTO)
+                dismiss()
             }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset((-80).dp, 0.dp)
-        ) {
-            DropdownMenuItem(
-                text = { Text(autoText) },
-                onClick = {
-                    AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.AUTO)
-                    expanded = false
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(fullRangeText) },
-                onClick = {
-                    AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.FULL_RANGE)
-                    expanded = false
-                }
-            )
-        }
+        )
+        DropdownMenuItem(
+            text = { Text(fullRangeText) },
+            onClick = {
+                AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.FULL_RANGE)
+                dismiss()
+            }
+        )
     }
 }
 
@@ -971,52 +953,26 @@ private fun RecordingDurationLimitSetting(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val currentLimit = AppSettings.recordingDurationLimitMin
     val limitCtx = AppSettings.localizedContext(LocalContext.current)
 
     val limitText = String.format(limitCtx.getString(R.string.recording_duration_value), currentLimit)
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clickable { expanded = true },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.recording_duration_limit), fontSize = 15.sp, color = labelColor)
-            Box(
-                modifier = Modifier.width(130.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(limitText, fontSize = 15.sp, color = valueColor)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
+    SettingRow(
+        label = stringResource(R.string.recording_duration_limit),
+        value = limitText,
+        labelColor = labelColor,
+        valueColor = valueColor
+    ) { dismiss ->
+        AppSettings.RECORDING_DURATION_OPTIONS.forEach { minutes ->
+            val label = String.format(limitCtx.getString(R.string.recording_duration_value), minutes)
+            DropdownMenuItem(
+                text = { Text(label) },
+                onClick = {
+                    AppSettings.updateRecordingDurationLimit(minutes)
+                    dismiss()
                 }
-            }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset((-80).dp, 0.dp)
-        ) {
-            AppSettings.RECORDING_DURATION_OPTIONS.forEach { minutes ->
-                val label = String.format(limitCtx.getString(R.string.recording_duration_value), minutes)
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        AppSettings.updateRecordingDurationLimit(minutes)
-                        expanded = false
-                    }
-                )
-            }
+            )
         }
     }
 }
@@ -1027,7 +983,6 @@ private fun RangeSetting(
     valueColor: androidx.compose.ui.graphics.Color,
     onRangeChange: (RangeMode) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val currentRange = AppSettings.range
     val rangeCtx = AppSettings.localizedContext(LocalContext.current)
 
@@ -1042,52 +997,27 @@ private fun RangeSetting(
     val midText = rangeCtx.getString(R.string.range_mid)
     val highText = rangeCtx.getString(R.string.range_high)
 
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clickable { expanded = true },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.range), fontSize = 15.sp, color = labelColor)
-            Box(
-                modifier = Modifier.width(130.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(rangeText, fontSize = 15.sp, color = valueColor)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
-                }
+    SettingRow(
+        label = stringResource(R.string.range),
+        value = rangeText,
+        labelColor = labelColor,
+        valueColor = valueColor
+    ) { dismiss ->
+        RangeMode.entries.forEach { mode ->
+            val label = when (mode) {
+                RangeMode.AUTO -> autoText
+                RangeMode.LOW -> lowText
+                RangeMode.MID -> midText
+                RangeMode.HIGH -> highText
             }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset((-80).dp, 0.dp)
-        ) {
-            RangeMode.entries.forEach { mode ->
-                val label = when (mode) {
-                    RangeMode.AUTO -> autoText
-                    RangeMode.LOW -> lowText
-                    RangeMode.MID -> midText
-                    RangeMode.HIGH -> highText
+            DropdownMenuItem(
+                text = { Text(label) },
+                onClick = {
+                    AppSettings.updateRange(mode)
+                    onRangeChange(mode)
+                    dismiss()
                 }
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        AppSettings.updateRange(mode)
-                        onRangeChange(mode)
-                        expanded = false
-                    }
-                )
-            }
+            )
         }
     }
 }

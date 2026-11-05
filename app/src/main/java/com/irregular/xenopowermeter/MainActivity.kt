@@ -25,19 +25,36 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalOverscrollFactory
+import com.irregular.xenopowermeter.ui.BouncyOverscrollFactory
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,6 +73,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,25 +84,28 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.BackdropEffectScope
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.runtimeShaderEffect
+import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.highlight.HighlightStyle
 import com.kyant.backdrop.isRenderEffectSupported
 import com.kyant.backdrop.isRuntimeShaderSupported
 import com.irregular.xenopowermeter.ui.BarPressState
-import com.irregular.xenopowermeter.ui.BarRefractionShader
 import com.irregular.xenopowermeter.ui.BottomBarInset
 import com.irregular.xenopowermeter.ui.BottomBarHeight
 import com.irregular.xenopowermeter.ui.BottomBarLift
+import com.irregular.xenopowermeter.ui.GlassRimHighlight
 import com.irregular.xenopowermeter.ui.PageEndGutter
+import com.irregular.xenopowermeter.ui.RailActionCount
+import com.irregular.xenopowermeter.ui.RailActionGap
+import com.irregular.xenopowermeter.ui.RailActionStack
 import com.irregular.xenopowermeter.ui.RailInset
 import com.irregular.xenopowermeter.ui.RailLength
 import com.irregular.xenopowermeter.ui.RailLift
 import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.RailThickness
+import com.irregular.xenopowermeter.ui.RailTopInset
 import com.irregular.xenopowermeter.ui.main.MainScreen
 import com.irregular.xenopowermeter.ui.about.AboutScreen
+import com.irregular.xenopowermeter.ui.about.ChangelogScreen
 import com.irregular.xenopowermeter.ui.navigation.bottomNavItems
 import com.irregular.xenopowermeter.ui.settings.SettingsScreen
 import com.irregular.xenopowermeter.ui.theme.AppColors
@@ -94,24 +115,9 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-
-/**
- * A whisper of a rim. The library default is a hard 0.5 dp hairline at full
- * layer alpha, which reads as a drawn white stroke. Widened and softened, then
- * dialled back, so it only catches along the 45° top-left arc — just enough to
- * lift the pill off the page without becoming an outline.
- * Top-level so the lambda keeps a stable identity across recompositions.
- */
-private val BottomBarHighlight: () -> Highlight? = {
-    Highlight(
-        width = 0.9.dp,
-        blurRadius = 2.2.dp,
-        alpha = 0.32f,
-        style = HighlightStyle.Default(color = Color.White.copy(alpha = 0.32f))
-    )
-}
 
 /**
  * Context carrying the in-app locale for Compose string lookups. Still
@@ -198,6 +204,21 @@ class MainActivity : AppCompatActivity() {
 @Composable
 fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
     val viewModel: WaveformViewModel = viewModel()
+    // Release notes live above the pager as a full-screen page: opening them
+    // must not tear down the tab pages (or their scroll positions), and the
+    // floating bar has to disappear behind them, which an in-page overlay
+    // could not do.
+    //
+    // Held as the State object rather than read through a delegate: reading it
+    // here would put the read in this function's restart scope, so flipping it
+    // would re-run the whole screen — pager, bars, waveform and all — on the
+    // very frame the page is composed, which measured as a ~70ms stall right
+    // after the tap. [ChangelogHost] reads it instead, so only that tiny
+    // composable invalidates.
+    val showChangelog = rememberSaveable { mutableStateOf(false) }
+    // Back inside the release notes is handled by the page itself: it owns the
+    // predictive-gesture progress, so a BackHandler here would steal the
+    // gesture before the page could follow it.
     // ViewPager-style pager (the Compose counterpart of ViewPager2/PageView):
     // the pages sit side by side on a horizontal track, so swiping flips
     // pages with finger-following physics and tab taps scroll the track.
@@ -285,32 +306,48 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                         MainScreen(viewModel = viewModel)
                     }
                 1 -> SettingsScreen(viewModel = viewModel)
-                else -> AboutScreen()
+                else -> AboutScreen(onOpenChangelog = { showChangelog.value = true })
             }
         }
 
         // The pager follows the bar: portrait flips pages sideways along the
         // bottom pill, landscape flips them vertically alongside the rail —
         // the swipe axis matches the direction the navigation sits in.
+        // No rubber band here: the rubber-band bounce belongs to the scrolling
+        // lists, a paging swipe reads better stopping dead at the neighbour
+        // page. The null provision must stop at the pager: pageContent runs
+        // INSIDE the pager, so the pages (and every list in them) would inherit
+        // the null and lose their bounce — provide the theme's bounce factory
+        // again at the page level, where the lists actually live.
         val pagerModifier = Modifier
             .fillMaxSize()
             .layerBackdrop(backdrop)
+        val pagerNoBounce = LocalOverscrollFactory provides null
+        val pageListBounce = LocalOverscrollFactory provides BouncyOverscrollFactory
         if (isLandscape) {
-            VerticalPager(
-                state = pagerState,
-                // Keep the adjacent page composed so sliding to it never pays a
-                // first-composition hitch.
-                beyondViewportPageCount = 1,
-                modifier = pagerModifier,
-                pageContent = pageContent
-            )
+            CompositionLocalProvider(pagerNoBounce) {
+                VerticalPager(
+                    state = pagerState,
+                    // Keep the adjacent page composed so sliding to it never pays a
+                    // first-composition hitch.
+                    beyondViewportPageCount = 1,
+                    modifier = pagerModifier,
+                    pageContent = { page ->
+                        CompositionLocalProvider(pageListBounce) { pageContent(page) }
+                    }
+                )
+            }
         } else {
-            HorizontalPager(
-                state = pagerState,
-                beyondViewportPageCount = 1,
-                modifier = pagerModifier,
-                pageContent = pageContent
-            )
+            CompositionLocalProvider(pagerNoBounce) {
+                HorizontalPager(
+                    state = pagerState,
+                    beyondViewportPageCount = 1,
+                    modifier = pagerModifier,
+                    pageContent = { page ->
+                        CompositionLocalProvider(pageListBounce) { pageContent(page) }
+                    }
+                )
+            }
         }
 
         val currentPage = pagerState.currentPage
@@ -335,37 +372,61 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
         val isDarkBar = MaterialTheme.colorScheme.background.luminance() < 0.5f
         val barSurfaceColor = AppColors.barColor()
             .copy(alpha = if (blurSupported) 0.58f else 0.93f)
+        // The portrait bar already tells the actions apart by fill: connect is
+        // the deeper teal, clear and record sit on the bar colour. The rail
+        // borrows the same pair so the two orientations agree.
+        val connectSurfaceColor = AppColors.connectButtonColor()
+            .copy(alpha = if (blurSupported) 0.58f else 0.93f)
+        // Disabled actions go grey in portrait — Material's filled button
+        // paints onSurface at 12% over the surface, and its label at 38%.
+        // The rail copies both values instead of keeping the teal and just
+        // fading the icon, which read as "still active, just dim".
+        val disabledSurfaceColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
+            .copy(alpha = if (blurSupported) 0.58f else 0.93f)
+        val disabledContentTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         val unselectedIconTint = AppColors.buttonTextColor()
 
         // Full pill: the radius is half the height, so the caps stay round at
         // any bar height instead of flattening into a rounded rectangle.
-        val barShape = RoundedCornerShape(bottomBarHeight / 2)
-        // Light blur on purpose. Thickness comes from the refraction below:
+        // The very same capsule serves both orientations: lying flat it spans
+        // the bottom of the screen, standing up it becomes the rail beside the
+        // content. The three action circles are separate pieces of glass above
+        // it — which is what lets a tab press scale the capsule, highlight and
+        // labels included, without dragging the buttons along (and vice versa).
+        val capsuleShape: Shape = remember(bottomBarHeight) {
+            RoundedCornerShape(bottomBarHeight / 2)
+        }
+        // Height of the circle stack riding above the capsule (0 in portrait).
+        val actionStack = if (isLandscape) RailActionStack else 0.dp
+        val actionStackPx = with(LocalDensity.current) { actionStack.toPx() }
+        // A tab press pools light at the finger, and the finger is measured in
+        // the rail node's coordinates while the capsule draws in its own — the
+        // circle stack's height is the difference.
+        val haloShift = Offset(0f, actionStackPx)
+        // Light blur on purpose. Thickness comes from the lens below:
         // bending what is behind the rim is what reads as a slab of glass,
         // while a heavy blur only reads as frosted plastic and swallows the
         // page underneath. Mirror keeps the rim from sampling a clamped row.
         val glassEffects: BackdropEffectScope.() -> Unit =
-            remember(blurSupported, refractSupported) {
+            remember(blurSupported, refractSupported, isLandscape) {
                 {
                     if (blurSupported) {
                         vibrancy()
-                        blur(6f.dp.toPx(), TileMode.Mirror)
+                        blur(8f.dp.toPx(), TileMode.Mirror)
                         // Mirror inflates padding to the radius, but that ring
-                        // records nothing except off-screen pixels — the
-                        // refraction shader folds its samples back into the
-                        // node on its own, so the ring buys nothing.
+                        // records nothing except off-screen pixels — the lens
+                        // folds its samples back into the node on its own, so
+                        // the ring buys nothing.
                         padding = 0f
-                        if (refractSupported) {
-                            runtimeShaderEffect(
-                                key = "BottomBarRefraction",
-                                shaderString = BarRefractionShader,
-                                uniformShaderName = "content"
-                            ) {
-                                setFloatUniform("rectSize", size.width, size.height)
-                                setFloatUniform("cornerRadius", (bottomBarHeight / 2).toPx())
-                                setFloatUniform("refractionHeight", 6f.dp.toPx())
-                                setFloatUniform("refractionAmount", -32f.dp.toPx())
-                            }
+                        // The library's own liquid-glass lens, the same one the
+                        // AndroidLiquidGlass catalog uses for its bottom tabs
+                        // (24dp refraction height, 24dp amount). It only knows
+                        // a rounded-rect outline; the fused rail outline is not
+                        // one, so the landscape rail keeps plain blur +
+                        // vibrancy.
+                        if (refractSupported && !isLandscape) {
+                            lens(24f.dp.toPx(), 24f.dp.toPx())
                         }
                     }
                 }
@@ -381,49 +442,75 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
         // doesn't rebuild the element (and re-apply the effects) every time.
         // The press values are read inside draw, so a press only invalidates
         // the draw phase — not this modifier, and not the composition.
-        val barSurface = remember(backdrop, barSurfaceColor, glassEffects, haloPeak) {
-            Modifier
-                .clip(barShape)
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { barShape },
-                    effects = glassEffects,
-                    // Both are non-null defaults in the library, so opting out
-                    // has to be explicit — but only the shadow stays off; the
-                    // rim is back in a softened form.
-                    highlight = BottomBarHighlight,
-                    shadow = null,
-                    innerShadow = null,
-                    onDrawSurface = { drawRect(barSurfaceColor) },
-                    onDrawFront = {
-                        val progress = pressState.progress.value
-                        if (progress > 0.001f) {
-                            // The whole slab brightens a touch...
-                            drawRect(
-                                Color.White.copy(alpha = 0.03f * progress),
-                                blendMode = BlendMode.Plus
-                            )
-                            // ...and a soft disc sits under the finger. Solid
-                            // out to half its radius, then a long falloff, so
-                            // it reads as light pooling in the glass rather
-                            // than a dot painted on top.
-                            val center = pressState.finger.value
-                            val radius = size.minDimension * 1.5f
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    0f to Color.White.copy(alpha = haloPeak * progress),
-                                    0.5f to Color.White.copy(alpha = haloPeak * progress),
-                                    1f to Color.Transparent,
+        val glassSurface =
+            remember(backdrop, barSurfaceColor, glassEffects, haloPeak, capsuleShape, haloShift) {
+                Modifier
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { capsuleShape },
+                        effects = glassEffects,
+                        // Both are non-null defaults in the library, so opting
+                        // out has to be explicit — but only the shadow stays
+                        // off; the rim is back in a softened form.
+                        highlight = GlassRimHighlight,
+                        shadow = null,
+                        innerShadow = null,
+                        onDrawSurface = { drawRect(barSurfaceColor) },
+                        onDrawFront = {
+                            val progress = pressState.progress.value
+                            if (progress > 0.001f) {
+                                // The capsule brightens a touch...
+                                drawRect(
+                                    Color.White.copy(alpha = 0.03f * progress),
+                                    blendMode = BlendMode.Plus
+                                )
+                                // ...and a soft disc sits under the finger. Solid
+                                // out to half its radius, then a long falloff, so
+                                // it reads as light pooling in the glass rather
+                                // than a dot painted on top.
+                                val center = pressState.finger.value - haloShift
+                                val radius = size.minDimension * 1.5f
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        0f to Color.White.copy(alpha = haloPeak * progress),
+                                        0.5f to Color.White.copy(alpha = haloPeak * progress),
+                                        1f to Color.Transparent,
+                                        center = center,
+                                        radius = radius
+                                    ),
+                                    radius = radius,
                                     center = center,
-                                    radius = radius
-                                ),
-                                radius = radius,
-                                center = center,
-                                blendMode = BlendMode.Plus
-                            )
+                                    blendMode = BlendMode.Plus
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+            }
+
+        // The action circles are their own discs of the same material. Same
+        // effects, same rim, same glass — only the tint differs, and it
+        // differs exactly the way the portrait buttons do: the connect action
+        // wears the deeper teal (connectButtonColor), clear and record sit on
+        // the bar tint. Reading the fills from the same palette is what keeps
+        // the two orientations looking like one app rather than two.
+        fun circleGlass(tint: Color): Modifier = Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { CircleShape },
+            effects = glassEffects,
+            highlight = GlassRimHighlight,
+            shadow = null,
+            innerShadow = null,
+            onDrawSurface = { drawRect(tint) }
+        )
+
+        val circleSurface = remember(backdrop, barSurfaceColor, glassEffects) {
+            circleGlass(barSurfaceColor)
+        }
+        val connectCircleSurface = remember(backdrop, connectSurfaceColor, glassEffects) {
+            circleGlass(connectSurfaceColor)
+        }
+        val disabledCircleSurface = remember(backdrop, disabledSurfaceColor, glassEffects) {
+            circleGlass(disabledSurfaceColor)
         }
 
         // Geometry: one capsule holding labelled tabs. Its thickness comes from
@@ -437,6 +524,9 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
         // thickness swap, tabs stack down it, and the highlight slides along y.
         val barLength = RailLength
         val barThickness = bottomBarHeight
+        // The rail node also has to hold the circle stack, but the capsule
+        // keeps its own length — tab geometry never mixes with the circles.
+        val nodeLength = barLength + actionStack
         val barPadding = 4.dp
         val selectorInset = 3.dp
         val selectorCross = bottomBarHeight - 12.dp
@@ -513,6 +603,12 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                         Modifier
                             .padding(start = RailLift)
                             .windowInsetsPadding(RailInset)
+                            // Reserve the status bar before centring: the
+                            // column then has equal air above and below inside
+                            // the canvas the eye actually sees, instead of
+                            // being centred on a window whose top 33dp are
+                            // chrome (which read as 16dp too high).
+                            .windowInsetsPadding(RailTopInset)
                     } else {
                         Modifier
                             .padding(bottom = BottomBarLift)
@@ -520,19 +616,29 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                     }
                 )
                 .then(
-                    if (isLandscape) Modifier.width(barThickness).height(barLength)
+                    if (isLandscape) Modifier.width(barThickness).height(nodeLength)
                     else Modifier.width(barLength).height(barThickness)
                 )
                 .align(if (isLandscape) Alignment.CenterStart else Alignment.BottomCenter)
-                .graphicsLayer {
-                    // Grows into the press instead of shrinking: this is a
-                    // piece of glass being pushed, not a button being squashed.
-                    // 16dp over the bar's longer side keeps the growth
-                    // proportional whether it lies flat or stands up.
-                    val scale = 1f + 16.dp.toPx() / size.maxDimension * pressState.progress.value
-                    scaleX = scale
-                    scaleY = scale
-                }
+                // Portrait: the node IS the capsule, so the whole thing —
+                // glass, highlight, labels — scales into the press and the
+                // 0.5-damping spring overshoots back out. Landscape keeps
+                // only the gesture here: its glass lives in the capsule and
+                // circle nodes below, each scaling on its own.
+                .then(
+                    if (isLandscape) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .graphicsLayer {
+                                val s = 1f + 0.05f * pressState.progress.value
+                                scaleX = s
+                                scaleY = s
+                            }
+                            .clip(capsuleShape)
+                            .then(glassSurface)
+                    }
+                )
                 // One gesture for the whole bar: a tap picks the tab under the
                 // finger, a drag along it carries the highlight 1:1 and lets go
                 // on the nearest tab. Press state lives here too, so the halo
@@ -542,9 +648,14 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                     val slop = viewConfiguration.touchSlop
                     val padPx = barPadding.toPx()
                     fun alongBar(position: Offset) =
-                        if (isLandscape) position.y else position.x
+                        if (isLandscape) position.y - actionStackPx else position.x
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        // Above the capsule live the action circles; they own
+                        // their gestures, the tab gesture must not eat them.
+                        if (isLandscape && down.position.y < actionStackPx) {
+                            return@awaitEachGesture
+                        }
                         pressState.press(down.position)
                         barHolds += 1
 
@@ -597,56 +708,96 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                         } else {
                             downTab
                         }
+                        // Dragging already ticked once per tab crossed; a tap
+                        // crosses none, so it would have landed silently. It
+                        // gets the same single click the action circles give —
+                        // a light keyboard-class click rather than the tick,
+                        // so "I picked this" never feels like "I scrolled past
+                        // this".
+                        if (!dragging) {
+                            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                        }
                         goToTab(target)
                         barHolds -= 1
                     }
-                }
-                .then(barSurface),
-            // Lying flat, the highlight's base position is the vertical centre
-            // and the offset moves it sideways. Standing up it is the other way
-            // round: base at the top, offset down the rail.
+                },
             contentAlignment = if (isLandscape) Alignment.TopCenter else Alignment.CenterStart
         ) {
-            // Sliding highlight, between the glass and the icons so the blur
-            // still reads behind it. The offset is read in placement, not in
-            // composition, so a drag doesn't recompose the tabs every frame.
-            Box(
-                modifier = Modifier
-                    .offset {
-                        val along = (barPadding + selectorInset).toPx().roundToInt() +
-                            (indicator.value * tabSpanPx).roundToInt()
-                        if (isLandscape) IntOffset(0, along) else IntOffset(along, 0)
-                    }
-                    .then(
-                        if (isLandscape) Modifier.width(selectorCross).height(selectorSpan)
-                        else Modifier.width(selectorSpan).height(selectorCross)
-                    )
-                    .clip(CircleShape)
-                    .background(selectorColor)
-            )
-
             // The active tab carries the accent; the rest are held back so
             // the highlight isn't the only thing telling them apart.
             val selectedTint = MaterialTheme.colorScheme.primary
             val unselectedTint = unselectedIconTint.copy(alpha = 0.78f)
 
+            // Sliding highlight, between the glass and the icons so the blur
+            // still reads behind it. The offset is read in placement, not in
+            // composition, so a drag doesn't recompose the tabs every frame.
+            // In landscape it lives inside the capsule group, whose own offset
+            // already covers the circle stack, so it only travels the tab axis.
+            //
+            // The Q-bounce lives here too: the slider jelly-stretches along
+            // the tab axis and bulges across it while held, and the 0.5-damping
+            // press spring makes it overshoot on release — the reference
+            // bounces its slider the same way, never the whole bar.
+            val highlight = Modifier
+                .offset {
+                    val along = (barPadding + selectorInset).toPx().roundToInt() +
+                        (indicator.value * tabSpanPx).roundToInt()
+                    if (isLandscape) IntOffset(0, along) else IntOffset(along, 0)
+                }
+                .then(
+                    if (isLandscape) Modifier.width(selectorCross).height(selectorSpan)
+                    else Modifier.width(selectorSpan).height(selectorCross)
+                )
+                .clip(CircleShape)
+                .graphicsLayer {
+                    val p = pressState.progress.value
+                    if (isLandscape) {
+                        scaleX = 1f + 0.05f * p
+                        scaleY = 1f + 0.14f * p
+                    } else {
+                        scaleX = 1f + 0.14f * p
+                        scaleY = 1f + 0.05f * p
+                    }
+                }
+                .background(selectorColor)
+
             if (isLandscape) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(vertical = barPadding),
-                    verticalArrangement = Arrangement.Center
+                // The capsule is a node of its own: pressing it scales glass,
+                // highlight and labels together — the same answer the portrait
+                // bar gives — while the circles overhead stay exactly put.
+                Box(
+                    modifier = Modifier
+                        .offset(y = actionStack)
+                        .width(barThickness)
+                        .height(barLength)
+                        .graphicsLayer {
+                            val s = 1f + 0.05f * pressState.progress.value
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .clip(capsuleShape)
+                        .then(glassSurface),
+                    contentAlignment = Alignment.TopCenter
                 ) {
-                    bottomNavItems.forEachIndexed { index, screen ->
-                        BarTab(
-                            icon = screen.icon,
-                            label = stringResource(screen.labelRes),
-                            selected = index == activeIndex,
-                            tint = if (index == activeIndex) selectedTint else unselectedTint,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            onClick = { goToTab(index) }
-                        )
+                    Box(highlight)
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(vertical = barPadding),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        bottomNavItems.forEachIndexed { index, screen ->
+                            BarTab(
+                                icon = screen.icon,
+                                label = stringResource(screen.labelRes),
+                                selected = index == activeIndex,
+                                tint = if (index == activeIndex) selectedTint else unselectedTint,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                                onClick = { goToTab(index) }
+                            )
+                        }
                     }
                 }
             } else {
+                Box(highlight)
                 Row(
                     modifier = Modifier.fillMaxSize().padding(horizontal = barPadding),
                     verticalAlignment = Alignment.CenterVertically
@@ -663,7 +814,235 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                     }
                 }
             }
+
+            // Landscape only: the three home actions ride above the rail as
+            // their own discs of glass (same material, same rim, same tint).
+            // Each one scales on its own press, so a tab press never moves
+            // them and a circle press never touches the capsule.
+            if (isLandscape) {
+                val circleTint = AppColors.buttonTextColor()
+                val accentTint = MaterialTheme.colorScheme.primary
+
+                // Resolve the dialog strings here — where the hot language
+                // switch provably re-resolves — and pass them in as plain
+                // values; a Dialog captures its locals when it opens.
+                val clearTitle = stringResource(R.string.clear_confirm_title)
+                val clearMessage = stringResource(R.string.clear_confirm_message)
+                val confirmLabel = stringResource(R.string.confirm_clear)
+                val cancelLabel = stringResource(R.string.cancel)
+                var showClearDialog by remember { mutableStateOf(false) }
+
+                if (showClearDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearDialog = false },
+                        title = { Text(clearTitle) },
+                        text = { Text(clearMessage) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearDialog = false
+                                viewModel.clearWaveform()
+                            }) {
+                                Text(confirmLabel)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearDialog = false }) {
+                                Text(cancelLabel)
+                            }
+                        }
+                    )
+                }
+
+                RailActionButton(
+                    surface = connectCircleSurface,
+                    disabledSurface = disabledCircleSurface,
+                    disabledTint = disabledContentTint,
+                    icon = if (isConnected) Icons.Default.LinkOff else Icons.Default.Usb,
+                    contentDescription = stringResource(
+                        if (isConnected) R.string.disconnect else R.string.connect
+                    ),
+                    enabled = true,
+                    tint = if (isConnected) accentTint else circleTint,
+                    modifier = Modifier.offset(y = 0.dp),
+                    onClick = { if (isConnected) viewModel.disconnect() else viewModel.connect() }
+                )
+                RailActionButton(
+                    surface = circleSurface,
+                    disabledSurface = disabledCircleSurface,
+                    disabledTint = disabledContentTint,
+                    icon = Icons.Default.Clear,
+                    contentDescription = stringResource(R.string.clear),
+                    enabled = !isRecording,
+                    tint = circleTint,
+                    modifier = Modifier.offset(y = RailThickness + RailActionGap),
+                    onClick = { showClearDialog = true }
+                )
+                RailActionButton(
+                    surface = circleSurface,
+                    disabledSurface = disabledCircleSurface,
+                    disabledTint = disabledContentTint,
+                    icon = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                    contentDescription = stringResource(
+                        if (isRecording) R.string.stop else R.string.record
+                    ),
+                    enabled = isConnected,
+                    tint = if (isRecording) accentTint else circleTint,
+                    modifier = Modifier.offset(
+                        y = (RailThickness + RailActionGap) * 2
+                    ),
+                    onClick = { viewModel.toggleRecording() }
+                )
+            }
         }
+
+        // Release notes page. Last child on purpose: it covers the pager and
+        // the floating bar, so the detail page owns the whole window.
+        // Composed only while it is open, with no transition of its own: the
+        // page pushes itself in from the right edge and reports back once it
+        // has finished sliding out, so opening and the predictive back gesture
+        // are one continuous movement rather than two different animations.
+        ChangelogHost(
+            visible = showChangelog,
+            warmWhenAboutShown = pagerState.currentPage == bottomNavItems.lastIndex,
+            onClose = { showChangelog.value = false }
+        )
+    }
+}
+
+/**
+ * Mounts the release notes page. Its own composable so that flipping the
+ * visibility flag invalidates this and nothing else — see the note where the
+ * state is created.
+ *
+ * The page is also composed while the About tab is on screen (a beat after the
+ * tab change settles) even though it is closed. Laying its cards out costs
+ * ~60ms on this device, and paying that on the tap means the first frame of the
+ * opening animation is a stall — which reads as "slow to open" no matter how
+ * short the animation is. Composed ahead of time, the tap only has to start the
+ * motion. While closed the page sits translated off the right edge and its back
+ * handler is disabled, so it neither draws over nor intercepts anything.
+ */
+@Composable
+private fun ChangelogHost(
+    visible: State<Boolean>,
+    warmWhenAboutShown: Boolean,
+    onClose: () -> Unit
+) {
+    var warmed by remember { mutableStateOf(false) }
+    LaunchedEffect(warmWhenAboutShown) {
+        if (warmWhenAboutShown) {
+            // Let the tab's own transition finish first, otherwise the cost
+            // lands as a dropped frame in the page swipe.
+            delay(400)
+            warmed = true
+        } else {
+            warmed = false
+        }
+    }
+
+    if (warmed || visible.value) {
+        ChangelogScreen(visible = visible.value, onBack = onClose)
+    }
+}
+
+/**
+ * One action circle hanging above the landscape rail. The disc is its own
+ * piece of glass ([surface]) rather than part of the capsule's outline, so a
+ * press scales the whole piece — glass, halo and icon — without the capsule
+ * noticing; the same separation keeps a tab press from moving the circles.
+ */
+@Composable
+private fun RailActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    tint: Color,
+    surface: Modifier,
+    disabledSurface: Modifier,
+    disabledTint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    // The disc already answers with glass and a halo; without this it is the
+    // only pressable thing in the app that answers in silence, while the rail
+    // beside it ticks on every tab it scrolls past.
+    val haptic = LocalHapticFeedback.current
+    val progress by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 300f),
+        label = "railActionPress"
+    )
+    // The halo must actually read on a 60dp disc: the slab's 0.04 peak is
+    // spread over a 90dp pool, but here the same energy lands in a much
+    // smaller circle, so it needs a stronger peak to feel like the capsule's
+    // press glow rather than a rendering accident.
+    val haloPeak = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) 0.26f else 0.18f
+
+    Box(
+        modifier = modifier
+            .size(RailThickness)
+            // The scale wraps the glass too: the disc grows as one piece,
+            // exactly like the capsule does on a tab press. A 56dp disc needs
+            // a larger fraction than the 260dp capsule to travel a comparable
+            // distance at its rim (3.4dp a side here, 6.5dp there).
+            .graphicsLayer {
+                val scale = 1f + 0.12f * progress
+                scaleX = scale
+                scaleY = scale
+            }
+            // A disabled action goes grey, exactly like the portrait bar's
+            // filled buttons: the teal one is "live", the grey one is inert.
+            .then(if (enabled) surface else disabledSurface)
+            // The halo pools inside this circle only: unclipped it reaches
+            // 1.5x the diameter and washes over the capsule across the gap,
+            // which read as the capsule reacting to a circle press.
+            .clip(CircleShape)
+            .drawWithContent {
+                if (progress > 0.001f) {
+                    // Same two passes as the capsule: the whole disc lifts a
+                    // touch (Plus on pale glass barely moves, so it stays
+                    // tinted), then a core of light pools in the middle with a
+                    // longer falloff towards the rim — a full-strength wash to
+                    // the edge just bleached the disc white.
+                    drawRect(
+                        Color.White.copy(alpha = 0.05f * progress),
+                        blendMode = BlendMode.Plus
+                    )
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to Color.White.copy(alpha = haloPeak * progress),
+                            0.38f to Color.White.copy(alpha = haloPeak * 0.7f * progress),
+                            1f to Color.Transparent
+                        ),
+                        radius = size.minDimension * 0.95f,
+                        blendMode = BlendMode.Plus
+                    )
+                }
+                drawContent()
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                // Disabled discs keep their silence too: `clickable` never
+                // calls through when enabled is false, so a greyed-out record
+                // button cannot buzz for an action it refuses to take.
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                    onClick()
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (enabled) tint else disabledTint,
+            modifier = Modifier.size(22.dp)
+        )
     }
 }
 

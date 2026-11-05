@@ -3,9 +3,8 @@ package com.irregular.xenopowermeter.ui.about
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -23,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -40,13 +38,19 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.ui.BottomBarTopEdge
+import com.irregular.xenopowermeter.ui.BottomMeltOverhang
+import com.irregular.xenopowermeter.ui.bottomEdgeContentFade
 import com.irregular.xenopowermeter.ui.PageEndGutter
-import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
-import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
 import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
+import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
+import com.irregular.xenopowermeter.ui.TopBarMaterialHeight
+import com.irregular.xenopowermeter.ui.TopBarSkirt
+import com.irregular.xenopowermeter.ui.rememberTopEdgeProgress
+import com.irregular.xenopowermeter.ui.scrollEdgeContentFade
 
 private val dimColorMatrix = ColorMatrix(
     floatArrayOf(
@@ -58,7 +62,7 @@ private val dimColorMatrix = ColorMatrix(
 )
 
 @Composable
-fun AboutScreen() {
+fun AboutScreen(onOpenChangelog: () -> Unit) {
     val screenHeightDp = LocalConfiguration.current.screenHeightDp
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val isLandscape = screenWidthDp > screenHeightDp
@@ -87,30 +91,19 @@ fun AboutScreen() {
     val scrollState = rememberScrollState()
     val imageHeightDp = (screenHeightDp * 0.3f).dp
 
-    // The band dissolves away once the list rests at the very top (the first
-    // section then starts well below the image with nothing to dissolve), and
-    // returns as soon as content slides underneath the pinned image.
-    val topObscured by remember {
-        derivedStateOf { scrollState.value > 0 }
-    }
-    val topFadeAlpha by animateFloatAsState(
-        targetValue = if (topObscured) 1f else 0f,
-        animationSpec = tween(durationMillis = 200)
-    )
-
     if (isLandscape) {
         LandscapeAboutLayout(
             scrollState = scrollState,
-            topFadeAlpha = topFadeAlpha,
             imageHeightDp = imageHeightDp,
-            context = context
+            context = context,
+            onOpenChangelog = onOpenChangelog
         )
     } else {
         PortraitAboutLayout(
             scrollState = scrollState,
-            topFadeAlpha = topFadeAlpha,
             imageHeightDp = imageHeightDp,
-            context = context
+            context = context,
+            onOpenChangelog = onOpenChangelog
         )
     }
 }
@@ -127,13 +120,14 @@ fun AboutScreen() {
 @Composable
 private fun AboutPage(
     scrollState: androidx.compose.foundation.ScrollState,
-    topFadeAlpha: Float,
     imageHeightDp: androidx.compose.ui.unit.Dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // Snapshot of the scrolling column alone (the image is not part of it), so
-    // the bands sample page content and never the photo they sit next to.
+    // the material samples page content and never the photo it sits next to.
     val pageBackdrop = rememberLayerBackdrop()
+    // The material only exists while content has actually slid under the photo.
+    val topEdgeProgress = rememberTopEdgeProgress(scrollState)
 
     // Landscape puts the bar on the start edge, so the cards clear it
     // sideways and the bottom is free again. Same shared start edge as Main
@@ -150,6 +144,29 @@ private fun AboutPage(
             modifier = Modifier
                 .fillMaxSize()
                 .layerBackdrop(pageBackdrop)
+                // Opaque inside the recorded layer: the material above is a
+                // copy of this, and a transparent copy would let the sharp
+                // page show through and ghost.
+                .background(MaterialTheme.colorScheme.background)
+                // Content fades into the photo before it is recorded, over the
+                // same distance the blur takes to reach full strength.
+                .scrollEdgeContentFade(
+                    progress = { topEdgeProgress.value },
+                    headerHeight = imageHeightDp + TopBarMaterialHeight + TopBarSkirt,
+                    headerTop = imageHeightDp
+                )
+                // Bottom mirror of the same dissolve: rows melt into the page
+                // as they slide under the pill, always on like the band's
+                // blur (content rests inside the band even at rest).
+                .then(
+                    if (!isLandscape) {
+                        Modifier.bottomEdgeContentFade(
+                            bandHeight = BottomBarTopEdge + BottomMeltOverhang
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
                 .verticalScroll(scrollState)
         ) {
             // Content starts below the pinned header image and slides under
@@ -164,33 +181,29 @@ private fun AboutPage(
             Spacer(modifier = Modifier.height(bottomRestSpace))
         }
 
-        // Same band as the Settings page, for the floating bar that hangs over
-        // this page too. With the bar on the side there is nothing to dissolve
-        // into down here.
+        // Same material as the Settings page, for the floating bar that hangs
+        // over this page too. With the bar on the side there is nothing to
+        // melt into down here.
         if (!isLandscape) {
             ProgressiveBottomBlur(
                 backdrop = pageBackdrop,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                bandHeight = BottomBarTopEdge + 10.dp,
+                bandHeight = BottomBarTopEdge + BottomMeltOverhang,
                 maxBlur = 20.dp
             )
         }
 
-        // Hung off the image's bottom edge, at the same strength: content
-        // dissolves into the photo instead of colliding with its hard edge.
-        //
-        // 76dp, not the Settings band's ~92dp: that one has the status bar's
-        // dead zone folded into it, this one starts at a real edge, and a
-        // ramp that long would smear the two rows that still matter on a page
-        // whose whole travel is about 44dp.
+        // Hung off the image's bottom edge: content melts into the photo
+        // instead of colliding with its hard edge, and only once it actually
+        // slides underneath.
         ProgressiveTopBlur(
             backdrop = pageBackdrop,
+            progress = { topEdgeProgress.value },
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = imageHeightDp)
-                .graphicsLayer { alpha = topFadeAlpha },
-            bandHeight = 76.dp,
-            maxBlur = 20.dp
+                .padding(top = imageHeightDp),
+            bandHeight = TopBarMaterialHeight,
+            maxBlur = 18.dp
         )
 
         // In landscape the photo joins the content grid: it starts on the same
@@ -214,12 +227,12 @@ private fun AboutPage(
 @Composable
 private fun PortraitAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
-    topFadeAlpha: Float,
     imageHeightDp: androidx.compose.ui.unit.Dp,
-    context: android.content.Context
+    context: android.content.Context,
+    onOpenChangelog: () -> Unit
 ) {
-    AboutPage(scrollState, topFadeAlpha, imageHeightDp) {
-        VersionInfoSection()
+    AboutPage(scrollState, imageHeightDp) {
+        VersionInfoSection(onOpenChangelog)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -234,21 +247,21 @@ private fun PortraitAboutLayout(
 @Composable
 private fun LandscapeAboutLayout(
     scrollState: androidx.compose.foundation.ScrollState,
-    topFadeAlpha: Float,
     imageHeightDp: androidx.compose.ui.unit.Dp,
-    context: android.content.Context
+    context: android.content.Context,
+    onOpenChangelog: () -> Unit
 ) {
-    AboutPage(scrollState, topFadeAlpha, imageHeightDp) {
+    AboutPage(scrollState, imageHeightDp) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DisplaySectionTitle(stringResource(R.string.version_info))
-                VersionInfoCard()
+                VersionInfoCard(onOpenChangelog)
 
                 DisplaySectionTitle(stringResource(R.string.author_label))
                 AuthorCard(context)
@@ -337,7 +350,7 @@ private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp, modifie
 }
 
 @Composable
-private fun VersionInfoSection() {
+private fun VersionInfoSection(onOpenChangelog: () -> Unit) {
     Text(
         text = stringResource(R.string.version_info),
         fontSize = 18.sp,
@@ -345,16 +358,15 @@ private fun VersionInfoSection() {
         color = MaterialTheme.colorScheme.onBackground
     )
     Spacer(modifier = Modifier.height(8.dp))
-    VersionInfoCard()
+    VersionInfoCard(onOpenChangelog)
 }
 
 @Composable
-private fun VersionInfoCard() {
+private fun VersionInfoCard(onOpenChangelog: () -> Unit) {
     val labelColor = AppColors.buttonTextColor()
     val valueColor = AppColors.linkColor()
     val cardColor = AppColors.cardColor()
     val context = LocalContext.current
-    var showChangelog by remember { mutableStateOf(false) }
 
     // Version comes from the installed manifest; the build date is baked
     // into the APK as a BuildConfig field at compile time (the toolchain
@@ -397,7 +409,7 @@ private fun VersionInfoCard() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(38.dp)
-                    .clickable { showChangelog = true },
+                    .clickable(onClick = onOpenChangelog),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -410,30 +422,6 @@ private fun VersionInfoCard() {
                 )
             }
         }
-    }
-
-    if (showChangelog) {
-        // Resolve the strings here in the page composition — where the hot
-        // language switch provably re-resolves — and pass them in as plain
-        // values. A Dialog captures its locals when it opens, so
-        // stringResource inside the dialog can lag a language switch.
-        val title = stringResource(R.string.changelog_title)
-        val body = stringResource(R.string.changelog_content)
-        val closeLabel = stringResource(R.string.close)
-        AlertDialog(
-            onDismissRequest = { showChangelog = false },
-            title = {
-                Text(text = title, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Text(text = body)
-            },
-            confirmButton = {
-                TextButton(onClick = { showChangelog = false }) {
-                    Text(closeLabel)
-                }
-            }
-        )
     }
 }
 
@@ -535,6 +523,7 @@ private fun SpecialThanksCard(context: android.content.Context) {
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_power_pico), url = "https://github.com/No-Chicken/Power-Pico", labelColor = labelColor, valueColor = valueColor)
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_nexio_schedule), url = "https://github.com/HaoZai000/NexioSchedule", labelColor = labelColor, valueColor = valueColor)
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_liquid_glass), url = "https://github.com/Kyant0/AndroidLiquidGlass", labelColor = labelColor, valueColor = valueColor)
+            ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_glasmio), url = "https://github.com/NEORUAA/Glasmio", labelColor = labelColor, valueColor = valueColor)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

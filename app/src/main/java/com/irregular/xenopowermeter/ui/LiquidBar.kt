@@ -12,62 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Refraction along the pill's rim, the way a slab of glass bends what is
- * behind its edge.
- *
- * This is what gives the bar its thickness. Blur alone only ever reads as
- * frosted plastic: crank it up and the surface goes milky, back it off and the
- * pill looks like a flat sticker. Bending the sampled content near the rim
- * (up to [refractionAmount] of pull over the outer [refractionHeight] dp) puts
- * a visible density change exactly on the edge, so the blur is free to stay
- * light and the content behind the glass stays legible.
- *
- * Same falloff as the reference: a circular map so the bend is strongest at
- * the very rim and reaches zero smoothly at `refractionHeight`, with the
- * sampling direction taken from the SDF gradient (i.e. always along the
- * inward normal, on the sides and the caps alike).
- */
-internal const val BarRefractionShader = """
-uniform shader content;
-uniform float2 rectSize;
-uniform float cornerRadius;
-uniform float refractionHeight;
-uniform float refractionAmount;
-
-float sdRoundRect(float2 p, float2 halfSize, float r) {
-    float2 q = abs(p) - (halfSize - float2(r, r));
-    return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
-}
-
-float circleMap(float x) {
-    return 1.0 - sqrt(1.0 - x * x);
-}
-
-half4 main(float2 coord) {
-    float2 halfSize = rectSize * 0.5;
-    float2 p = coord - halfSize;
-    float sd = sdRoundRect(p, halfSize, cornerRadius);
-    float rh = refractionHeight;
-    if (-sd >= rh) {
-        return content.eval(coord);
-    }
-    sd = min(sd, 0.0);
-    float d = circleMap(1.0 - (-sd) / rh) * refractionAmount;
-
-    float eps = 0.75;
-    float2 g = float2(
-        sdRoundRect(p + float2(eps, 0.0), halfSize, cornerRadius) -
-            sdRoundRect(p - float2(eps, 0.0), halfSize, cornerRadius),
-        sdRoundRect(p + float2(0.0, eps), halfSize, cornerRadius) -
-            sdRoundRect(p - float2(0.0, eps), halfSize, cornerRadius)
-    );
-    float gl = length(g);
-    float2 grad = gl > 0.0001 ? g / gl : float2(0.0, 0.0);
-    return content.eval(coord + d * grad);
-}
-"""
-
-/**
  * Press state for the floating bar: how far into the press we are, and where
  * the finger is.
  *

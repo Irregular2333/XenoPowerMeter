@@ -63,18 +63,7 @@
     <!-- Notification -->
     <string name="auto_connect">自动连接设备</string>
     <string name="notification_push">记录数据通知推送</string>
-    <string name="notification_enabled">已开启通知</string>
-    <string name="notification_disabled">已关闭通知</string>
     <string name="notification_enable_failed">开启通知失败</string>
-
-    <!-- Language change notifications -->
-    <string name="language_changed_to_system">已切换为跟随系统</string>
-    <string name="language_changed_to_chinese">已切换为中文</string>
-    <string name="language_changed_to_english">已切换为English</string>
-    <string name="language_changed_to_japanese">已切换为日本語</string>
-
-    <!-- Settings -->
-    <string name="color_mode_changed">主题模式已切换</string>
 
     <!-- Connection events -->
     <string name="event_connected">设备已连接</string>
@@ -95,7 +84,6 @@
     <string name="clear_recorded_data_confirm">确定要清除所有已记录的数据吗？此操作不可撤销。</string>
     <string name="confirm_clear">确认清除</string>
     <string name="cancel">取消</string>
-    <string name="close">关闭</string>
 
     <!-- About -->
     <string name="about_description">一个用于采集Power-Pico数据的App</string>
@@ -104,7 +92,66 @@
     <string name="build_date">编译日期</string>
     <string name="changelog">更新日志</string>
     <string name="changelog_title">更新日志</string>
-    <string name="changelog_content">- 优化了应用的显示效果\n- 优化了平板端的布局\n- 新增适配液态底栏和渐进模糊\n- 修复了网格图显示异常的问题</string>
+    <string name="back">返回</string>
+
+    <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_1_0">
+        <item>修复了网格图显示错误以及单位错误的问题</item>
+        <item>优化了首页的显示效果</item>
+        <item>优化了液态底栏以及渐进模糊的效果</item>
+        <item>优化了应用的平板端适配布局</item>
+        <item>优化了应用的振感体验</item>
+        <item>去除了应用内的部分Toast提示</item>
+    </string-array>
+    <string-array name="changelog_2_0_3">
+        <item>优化了应用的显示效果</item>
+        <item>优化了平板端的布局</item>
+        <item>新增适配液态底栏和渐进模糊</item>
+        <item>修复了网格图显示异常的问题</item>
+    </string-array>
+    <string-array name="changelog_2_0_2">
+        <item>新增图表缩放功能</item>
+        <item>新增数据记录时长上限</item>
+        <item>优化了应用的稳定性</item>
+        <item>优化了设备页面的逻辑</item>
+    </string-array>
+    <string-array name="changelog_2_0_1">
+        <item>进一步优化apk包体存储</item>
+        <item>优化了应用的稳定性和流畅度</item>
+        <item>优化了记录数据功能的稳定性</item>
+        <item>优化了应用的多语言稳定性</item>
+        <item>修复记录时偶现丢失数据的问题</item>
+    </string-array>
+    <string-array name="changelog_2_0_0">
+        <item>更换全新更简洁的图标</item>
+        <item>新增通知、多语言、主题模式自定义</item>
+        <item>新增自动连接设备功能</item>
+        <item>新增清除录制数据时的二次确认弹窗</item>
+        <item>优化了深色模式的显示效果</item>
+        <item>优化了应用的显示效果与大屏适配</item>
+        <item>优化了底栏的显示效果</item>
+        <item>优化了记录数据功能的稳定性和逻辑</item>
+        <item>优化了导出数据功能的稳定性和逻辑</item>
+        <item>优化了应用数据缓存留存的逻辑</item>
+        <item>优化了应用内的流畅度与包体存储</item>
+        <item>修复无法读取设备校准数据的问题</item>
+    </string-array>
+    <string-array name="changelog_1_4_0">
+        <item>新增自适应布局，适配更多比例的设备</item>
+        <item>新增连接设备时的报错提醒</item>
+        <item>修复部分情况下不显示单位的问题</item>
+        <item>修复部分情况下底栏与页面冲突的问题</item>
+    </string-array>
+    <string-array name="changelog_1_3_0">
+        <item>新增适配深色模式（自动切换）</item>
+        <item>修复版本号和编译日期异常的问题</item>
+    </string-array>
+    <string-array name="changelog_1_2_0">
+        <item>新增悬浮式底栏</item>
+        <item>新增适配小米超级岛</item>
+        <item>修复平均功率计算错误的问题</item>
+        <item>修复部分情况下闪退的问题</item>
+    </string-array>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">特别感谢</string>
@@ -113,6 +160,7 @@
     <string name="github_power_pico">Power-Pico</string>
     <string name="github_nexio_schedule">NexioSchedule</string>
     <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="github_glasmio">Glasmio</string>
     <string name="jrpg_thanks">陪伴我大学生活的JRPG们</string>
     <string name="and_also">以及</string>
     <string name="island_open_app">打开应用</string>

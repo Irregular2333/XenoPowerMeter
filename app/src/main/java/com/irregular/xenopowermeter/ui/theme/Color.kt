@@ -24,13 +24,15 @@ private val DarkCurrentColor = Color(0xFF7AB4D4)
 private val DarkPowerColor = Color(0xFFD4C07A)
 private val DarkAvgPowerColor = Color(0xFFD49A7A)
 
-// Light theme colors
-private val LightBarColor = Color(0xFFD0EEF0)
-private val LightButtonTextColor = Color(0xFF3A7A7E)
-private val LightConnectButtonColor = Color(0xFF9CD8DB)
-private val LightCardColor = Color(0xFFE6F5F6)
-private val LightLabelColor = Color(0xFF888888)
-private val LightDividerColor = Color(0xFFE0E0E0)
+// Light theme colors. Saturation is deliberately a step above "washed pastel":
+// against the F5F5F5 background the earlier tints (E6F5F6 cards, D0EEF0 bars)
+// nearly vanished, while the dark palette kept its contrast.
+private val LightBarColor = Color(0xFFBDE5E9)
+private val LightButtonTextColor = Color(0xFF1E6468)
+private val LightConnectButtonColor = Color(0xFF7FCED4)
+private val LightCardColor = Color(0xFFD7EEF1)
+private val LightLabelColor = Color(0xFF111111)
+private val LightDividerColor = Color(0xFFB5CBCF)
 private val LightChartBg = Color(0xFF0D0D1A)
 private val LightGridColor = Color(0xFF2A2A3E)
 private val LightAxisLabelColor = Color(0xFFBBBBBB)

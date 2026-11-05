@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,6 +59,14 @@ internal val BottomBarTopEdge: Dp
         BottomBarLift + BottomBarHeight
 
 /**
+ * How far the bottom blur band reaches above [BottomBarTopEdge]. The ramp
+ * inside the band starts at exactly zero radius, so the overhang draws no
+ * edge of its own — it only moves the melt start higher, spreading the
+ * defocus over the pill's crown.
+ */
+internal val BottomMeltOverhang: Dp = 16.dp
+
+/**
  * Landscape counterpart of the pill: the same slab of glass, stood on its end
  * and hung off the window's start edge. Everything below is the vertical
  * layout's measurement with the axes swapped, so the rail and the pill can
@@ -67,6 +77,22 @@ internal val RailInset: WindowInsets
         .union(WindowInsets.displayCutout)
         .only(WindowInsetsSides.Start)
 
+/**
+ * Landscape only: the strip at the top of the window the rail must not treat
+ * as usable canvas.
+ *
+ * The rail hangs off the window's start edge and is centred vertically, but
+ * the window is edge-to-edge — its top 33dp are the status bar. Centring on
+ * the raw window therefore put the column's centre 16dp above the centre of
+ * everything the eye reads as the frame (the area below the status bar, and
+ * the content block beside it), which is what made the rail look like it was
+ * drifting upwards even though its box was dead centred. Reserving the status
+ * bar first makes the centring literal: equal air above and below, measured
+ * from the top of the visible canvas.
+ */
+internal val RailTopInset: WindowInsets
+    @Composable get() = WindowInsets.statusBars.only(WindowInsetsSides.Top)
+
 /** Width of the rail: the pill's height, standing up. */
 internal val RailThickness: Dp = BottomBarHeight
 
@@ -74,12 +100,12 @@ internal val RailThickness: Dp = BottomBarHeight
 internal val RailLength: Dp = 260.dp
 
 /**
- * Gap between the rail and the window's start edge. Kept independent from
- * [BottomBarLift]: the portrait pill sits nearly flush (1dp), but the rail
- * needs the old 6dp so the pages' start-side rhythm — edge, rail, content —
- * still reads in that order ([RailPageGutter] matches this value).
+ * Gap between the rail and the window's start edge. Independent from
+ * [BottomBarLift] (the portrait pill sits nearly flush at 1dp). Unified with
+ * [RailPageGutter] so the landscape row reads as one even 8dp frame:
+ * edge — rail — content.
  */
-internal val RailLift: Dp = 6.dp
+internal val RailLift: Dp = 8.dp
 
 /**
  * Distance from the window's start edge to the rail's far edge — what a page
@@ -95,11 +121,11 @@ internal val RailEndEdge: Dp
  *
  * Every page starts its content at [RailPageStart] instead of each doing its
  * own arithmetic — that is precisely how the three screens ended up with three
- * different left margins (74/90/90dp) after the rail landed. Matches the rail's
- * own lift off the window edge ([RailLift]), so the two gaps read as the same
- * rhythm: edge — rail — content.
+ * different left margins (74/90/90dp) after the rail landed. Unified with the
+ * page's bottom margin (8dp) so the landscape frame reads as one even border:
+ * rail — gutter — content — gutter — edge.
  */
-internal val RailPageGutter: Dp = RailLift
+internal val RailPageGutter: Dp = 8.dp
 
 /**
  * Where page content begins in landscape, measured from the window's start
@@ -108,5 +134,32 @@ internal val RailPageGutter: Dp = RailLift
 internal val RailPageStart: Dp
     @Composable get() = RailEndEdge + RailPageGutter
 
-/** Trailing gutter shared by the pages in both orientations. */
-internal val PageEndGutter: Dp = 16.dp
+/**
+ * Trailing gutter shared by the pages. Landscape mirrors the start side's
+ * rhythm ([RailPageGutter], so content — gutter — edge reads the same on both
+ * ends of the rail row); portrait keeps the wider 16dp grip.
+ */
+internal val PageEndGutter: Dp
+    @Composable get() {
+        val config = LocalConfiguration.current
+        return if (config.screenWidthDp > config.screenHeightDp) RailPageGutter else 16.dp
+    }
+
+/**
+ * Landscape-only: the action circles (connect / clear / record) hang below
+ * the rail as part of the same slab of glass — the reference project's
+ * "trailing circle" idea rotated onto the vertical rail.
+ */
+internal val RailActionGap: Dp = 10.dp
+
+internal const val RailActionCount = 3
+
+/**
+ * Height of the circle stack above the capsule: the circles themselves plus
+ * one gap after each — the last gap is the one separating the stack from the
+ * capsule. Matches [RailShape]'s circle run exactly, so everything offset by
+ * this value (tab column, highlight, gesture guard) lines up with the capsule
+ * the shape actually draws.
+ */
+internal val RailActionStack: Dp =
+    (RailThickness + RailActionGap) * RailActionCount

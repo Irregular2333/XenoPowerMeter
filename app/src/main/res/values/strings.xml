@@ -63,8 +63,6 @@
     <!-- Notification -->
     <string name="auto_connect">Auto-connect device</string>
     <string name="notification_push">Record Notification</string>
-    <string name="notification_enabled">Notification enabled</string>
-    <string name="notification_disabled">Notification disabled</string>
     <string name="notification_enable_failed">Failed to enable notification</string>
     <string name="island_open_app">Open App</string>
     <string name="island_channel_name">Power Meter Live</string>
@@ -73,15 +71,6 @@
     <string name="island_status_monitoring">Monitoring</string>
     <string name="island_voltage_label">Voltage</string>
     <string name="island_current_label">Current</string>
-
-    <!-- Language change notifications -->
-    <string name="language_changed_to_system">Switched to system default</string>
-    <string name="language_changed_to_chinese">Switched to Chinese</string>
-    <string name="language_changed_to_english">Switched to English</string>
-    <string name="language_changed_to_japanese">Switched to Japanese</string>
-
-    <!-- Settings -->
-    <string name="color_mode_changed">Color mode switched</string>
 
     <!-- Connection events -->
     <string name="event_connected">Device connected</string>
@@ -102,7 +91,6 @@
     <string name="clear_recorded_data_confirm">Clear all recorded data? This cannot be undone.</string>
     <string name="confirm_clear">Confirm Clear</string>
     <string name="cancel">Cancel</string>
-    <string name="close">Close</string>
 
     <!-- About -->
     <string name="about_description">An Android app for collecting Power-Pico USB power meter data.</string>
@@ -111,7 +99,66 @@
     <string name="build_date">Build Date</string>
     <string name="changelog">Changelog</string>
     <string name="changelog_title">Changelog</string>
-    <string name="changelog_content">- Improved the app\'s visual presentation\n- Optimized the tablet layout\n- Added liquid bottom bar and progressive blur\n- Fixed the chart grid display issue</string>
+    <string name="back">Back</string>
+
+    <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_1_0">
+        <item>Fixed chart display errors and incorrect units</item>
+        <item>Improved the home page</item>
+        <item>Improved the liquid bottom bar and progressive blur</item>
+        <item>Improved tablet layout adaptation</item>
+        <item>Improved haptic feedback</item>
+        <item>Removed some in-app toast prompts</item>
+    </string-array>
+    <string-array name="changelog_2_0_3">
+        <item>Improved the app\'s visual presentation</item>
+        <item>Optimized the tablet layout</item>
+        <item>Added liquid bottom bar and progressive blur</item>
+        <item>Fixed the chart grid display issue</item>
+    </string-array>
+    <string-array name="changelog_2_0_2">
+        <item>Added chart zoom</item>
+        <item>Added a recording duration limit</item>
+        <item>Improved app stability</item>
+        <item>Improved the device page logic</item>
+    </string-array>
+    <string-array name="changelog_2_0_1">
+        <item>Further reduced APK size</item>
+        <item>Improved app stability and smoothness</item>
+        <item>Improved recording stability</item>
+        <item>Improved multi-language stability</item>
+        <item>Fixed occasional data loss while recording</item>
+    </string-array>
+    <string-array name="changelog_2_0_0">
+        <item>New, simpler app icon</item>
+        <item>Added notification, language, and theme customization</item>
+        <item>Added auto-connect for devices</item>
+        <item>Added a confirmation dialog when clearing recorded data</item>
+        <item>Improved dark mode</item>
+        <item>Improved app visuals and large-screen adaptation</item>
+        <item>Improved the bottom bar</item>
+        <item>Improved recording stability and logic</item>
+        <item>Improved export stability and logic</item>
+        <item>Improved the app data cache retention logic</item>
+        <item>Improved app smoothness and package size</item>
+        <item>Fixed failure to read device calibration data</item>
+    </string-array>
+    <string-array name="changelog_1_4_0">
+        <item>Added adaptive layouts for more screen ratios</item>
+        <item>Added error prompts when connecting a device</item>
+        <item>Fixed units not showing in some cases</item>
+        <item>Fixed bottom bar and page conflicts in some cases</item>
+    </string-array>
+    <string-array name="changelog_1_3_0">
+        <item>Added dark mode support (automatic switching)</item>
+        <item>Fixed abnormal version number and build date</item>
+    </string-array>
+    <string-array name="changelog_1_2_0">
+        <item>Added a floating bottom bar</item>
+        <item>Added support for Xiaomi Super Island</item>
+        <item>Fixed incorrect average power calculation</item>
+        <item>Fixed crashes in some cases</item>
+    </string-array>
     <string name="github">GitHub</string>
     <string name="author_label">Author</string>
     <string name="special_thanks">Special Thanks</string>
@@ -120,6 +167,7 @@
     <string name="github_power_pico">Power-Pico</string>
     <string name="github_nexio_schedule">NexioSchedule</string>
     <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="github_glasmio">Glasmio</string>
     <string name="jrpg_thanks">JRPGs of my university life</string>
     <string name="and_also">And</string>
     <!-- Bottom navigation -->

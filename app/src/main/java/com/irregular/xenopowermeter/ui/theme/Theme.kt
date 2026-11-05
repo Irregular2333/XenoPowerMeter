@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.irregular.xenopowermeter.AppSettings
+import com.irregular.xenopowermeter.ui.BouncyOverscrollFactory
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF009FAA),
@@ -57,19 +58,13 @@ fun XenoPowerMeterTheme(
         }
     }
 
-    // Replace the platform stretch with a translation-only rubber band: the
-    // stretch re-records the content into a RenderNode every frame, and the
-    // glass surfaces' backdrop snapshots do not survive that cleanly (the pill
-    // blinks when the stretch snaps back). A translation leaves the snapshot
-    // No overscroll effect at all: lists and the pager stop dead at their
-    // edges — no rubber band, no stretch. The platform stretch (the default)
-    // re-records the content into a RenderNode every frame, and the glass
-    // surfaces' backdrop snapshots do not survive that cleanly (the pill
-    // blinks when the stretch snaps back); the translation-only bounce that
-    // replaced it was removed later as a deliberate flatness choice — null
-    // keeps both effects out while leaving BouncyOverscroll in the tree for
-    // reference.
-    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+    // Replace the platform stretch with a translation-only rubber band (see
+    // BouncyOverscroll): the platform stretch re-records the content into a
+    // RenderNode every frame, and the glass surfaces' backdrop snapshots do not
+    // survive that cleanly (the pill blinks when the stretch snaps back). The
+    // translation-only bounce keeps every pixel where it was, so the snapshot
+    // stays valid and the glass never loses its base.
+    CompositionLocalProvider(LocalOverscrollFactory provides BouncyOverscrollFactory) {
         MaterialTheme(
             colorScheme = colorScheme,
             content = content

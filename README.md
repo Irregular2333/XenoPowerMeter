@@ -45,21 +45,23 @@ app/src/main/java/com/irregular/xenopowermeter/
 ├── ui/
 │   ├── BottomInset.kt                  // 底栏/侧边导轨尺寸常量
 │   ├── LiquidBar.kt                    // 液态底栏组件
-│   ├── ProgressiveBlur.kt              // 渐进模糊效果
-│   ├── BouncyOverscroll.kt             // 弹性回弹效果(当前已停用)
+│   ├── GlassRim.kt                     // 玻璃边缘高光/描边样式
+│   ├── ProgressiveBlur.kt              // 渐进模糊
+│   ├── BouncyOverscroll.kt             // 弹性回弹效果
 │   ├── main/
-│   │   └── MainScreen.kt               // 主界面
+│   │   └── MainScreen.kt               // 主界面(波形图表/测量数据/网格渲染)
 │   ├── settings/
-│   │   └── SettingsScreen.kt           // 设置页
+│   │   └── SettingsScreen.kt           // 设置页(采样/校准/显示项配置)
 │   ├── about/
-│   │   └── AboutScreen.kt              // 关于页
+│   │   ├── AboutScreen.kt              // 关于页
+│   │   └── ChangelogScreen.kt          // 更新日志
 │   ├── navigation/
 │   │   └── Navigation.kt               // 底栏页面定义
 │   └── theme/
 │       ├── Theme.kt                    // Material3主题配置
 │       └── Color.kt                    // 自定义颜色定义
 ├── viewmodel/
-│   └── WaveformViewModel.kt            // 核心：数据采集/波形图表/状态管理
+│   └── WaveformViewModel.kt            // 核心:数据采集/波形图表/状态管理
 ├── data/
 │   ├── model/
 │   │   ├── UsbAdcPacket.kt             // USB数据包模型
@@ -75,7 +77,7 @@ app/src/main/java/com/irregular/xenopowermeter/
 ├── recording/
 │   └── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
 └── notification/
-    └── IslandHelper.kt                 // 小米HyperOS超级岛适配
+    └── IslandHelper.kt                 // 通知通道管理+小米HyperOS超级岛适配
 ```
 
 ## 特别感谢：
@@ -83,4 +85,5 @@ app/src/main/java/com/irregular/xenopowermeter/
 - [Github - Power-Pico](https://github.com/No-Chicken/Power-Pico)
 - [Github - NexioSchedule](https://github.com/HaoZai000/NexioSchedule)
 - [Github - Android Liquid Glass](https://github.com/Kyant0/AndroidLiquidGlass)
+- [Github - Glasmio](https://github.com/NEORUAA/Glasmio)
 - 以及陪伴我大学生活的JPRG们

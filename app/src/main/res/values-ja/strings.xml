@@ -63,18 +63,7 @@
     <!-- Notification -->
     <string name="auto_connect">デバイス自動接続</string>
     <string name="notification_push">記録通知</string>
-    <string name="notification_enabled">通知が有効になりました</string>
-    <string name="notification_disabled">通知が無効になりました</string>
     <string name="notification_enable_failed">通知の有効化に失敗しました</string>
-
-    <!-- Language change notifications -->
-    <string name="language_changed_to_system">システムに従うに切り替えました</string>
-    <string name="language_changed_to_chinese">中文に切り替えました</string>
-    <string name="language_changed_to_english">Englishに切り替えました</string>
-    <string name="language_changed_to_japanese">日本語に切り替えました</string>
-
-    <!-- Settings -->
-    <string name="color_mode_changed">カラーモードを切り替えました</string>
 
     <!-- Connection events -->
     <string name="event_connected">デバイスが接続されました</string>
@@ -95,7 +84,6 @@
     <string name="clear_recorded_data_confirm">すべての記録データを消去しますか？この操作は取り消せません。</string>
     <string name="confirm_clear">消去を確認</string>
     <string name="cancel">キャンセル</string>
-    <string name="close">閉じる</string>
 
     <!-- About -->
     <string name="about_description">Power-Picoデータ収集用Androidアプリ</string>
@@ -104,7 +92,66 @@
     <string name="build_date">ビルド日</string>
     <string name="changelog">更新履歴</string>
     <string name="changelog_title">更新履歴</string>
-    <string name="changelog_content">- アプリの表示を改善\n- タブレット向けレイアウトを最適化\n- リキッドボトムバーとプログレッシブブラーに対応\n- グラフのグリッド表示の問題を修正</string>
+    <string name="back">戻る</string>
+
+    <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_1_0">
+        <item>グラフの表示の問題と単位の誤りを修正</item>
+        <item>ホーム画面の表示を改善</item>
+        <item>リキッドボトムバーとプログレッシブブラーの効果を改善</item>
+        <item>タブレット向けレイアウトを改善</item>
+        <item>振動フィードバックを改善</item>
+        <item>アプリ内の一部のトースト表示を削除</item>
+    </string-array>
+    <string-array name="changelog_2_0_3">
+        <item>アプリの表示を改善</item>
+        <item>タブレット向けレイアウトを最適化</item>
+        <item>リキッドボトムバーとプログレッシブブラーに対応</item>
+        <item>グラフのグリッド表示の問題を修正</item>
+    </string-array>
+    <string-array name="changelog_2_0_2">
+        <item>グラフのズーム機能を追加</item>
+        <item>データ記録の最大時間を追加</item>
+        <item>アプリの安定性を改善</item>
+        <item>デバイスページのロジックを改善</item>
+    </string-array>
+    <string-array name="changelog_2_0_1">
+        <item>APKのサイズをさらに削減</item>
+        <item>アプリの安定性と動作の滑らかさを改善</item>
+        <item>データ記録機能の安定性を改善</item>
+        <item>アプリの多言語の安定性を改善</item>
+        <item>記録時にデータが失われることがある問題を修正</item>
+    </string-array>
+    <string-array name="changelog_2_0_0">
+        <item>アイコンを刷新し、よりシンプルに</item>
+        <item>通知・多言語・テーマのカスタマイズを追加</item>
+        <item>デバイスの自動接続機能を追加</item>
+        <item>記録データ削除時の確認ダイアログを追加</item>
+        <item>ダークモードの表示を改善</item>
+        <item>アプリの表示と大画面対応を改善</item>
+        <item>ボトムバーの表示を改善</item>
+        <item>データ記録機能の安定性とロジックを改善</item>
+        <item>データ書き出し機能の安定性とロジックを改善</item>
+        <item>アプリデータのキャッシュ保持ロジックを改善</item>
+        <item>アプリの動作の滑らかさとパッケージサイズを改善</item>
+        <item>デバイスのキャリブレーションデータを読み取れない問題を修正</item>
+    </string-array>
+    <string-array name="changelog_1_4_0">
+        <item>アダプティブレイアウトを追加し、より多くの画面比率に対応</item>
+        <item>デバイス接続時のエラー通知を追加</item>
+        <item>一部環境で単位が表示されない問題を修正</item>
+        <item>一部環境でボトムバーとページが競合する問題を修正</item>
+    </string-array>
+    <string-array name="changelog_1_3_0">
+        <item>ダークモード（自動切り替え）に対応</item>
+        <item>バージョン番号とビルド日が異常になる問題を修正</item>
+    </string-array>
+    <string-array name="changelog_1_2_0">
+        <item>フローティングボトムバーを追加</item>
+        <item>Xiaomi スーパーアイランドに対応</item>
+        <item>平均電力の計算が誤る問題を修正</item>
+        <item>一部環境でクラッシュする問題を修正</item>
+    </string-array>
     <string name="github">GitHub</string>
     <string name="author_label">作者</string>
     <string name="special_thanks">スペシャルサンクス</string>
@@ -113,6 +160,7 @@
     <string name="github_power_pico">Power-Pico</string>
     <string name="github_nexio_schedule">NexioSchedule</string>
     <string name="github_liquid_glass">Android Liquid Glass</string>
+    <string name="github_glasmio">Glasmio</string>
     <string name="jrpg_thanks">大学生活を彩ったJRPGたち</string>
     <string name="and_also">そして</string>
     <string name="island_open_app">アプリを開く</string>

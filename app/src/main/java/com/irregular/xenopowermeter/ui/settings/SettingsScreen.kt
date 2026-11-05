@@ -35,14 +35,19 @@ import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.ui.BottomBarInset
 import com.irregular.xenopowermeter.ui.BottomBarTopEdge
+import com.irregular.xenopowermeter.ui.BottomMeltOverhang
+import com.irregular.xenopowermeter.ui.bottomEdgeContentFade
 import com.irregular.xenopowermeter.ui.BottomBarHeight
 import com.irregular.xenopowermeter.ui.PageEndGutter
-import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
-import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
 import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
+import com.irregular.xenopowermeter.ui.ProgressiveTopBlur
+import com.irregular.xenopowermeter.ui.TopBarSkirt
+import com.irregular.xenopowermeter.ui.rememberTopEdgeProgress
+import com.irregular.xenopowermeter.ui.scrollEdgeContentFade
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,11 +71,13 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        scope.launch {
-            if (granted) {
-                AppSettings.updateNotificationEnabled(true)
-                snackbarHostState.showSnackbar(context.getString(R.string.notification_enabled))
-            } else {
+        // Granting needs no announcement — the switch has already moved to
+        // "on" in plain sight. A refusal does: the switch stays off and the
+        // system sheet has gone, so this is the only thing that explains why.
+        if (granted) {
+            AppSettings.updateNotificationEnabled(true)
+        } else {
+            scope.launch {
                 snackbarHostState.showSnackbar(context.getString(R.string.notification_enable_failed))
             }
         }
@@ -271,10 +278,16 @@ private fun ScrollableSettingsPage(
         .asPaddingValues().calculateTopPadding()
     val contentTopSpace = statusBarTop + 8.dp
 
-    // Snapshot of just the scrolling column, for the blur band below to read.
+    // Snapshot of just the scrolling column, for the blur slab below to read.
     // It has to sit outside the scroll so it covers the viewport instead of the
     // whole (much taller) content.
     val pageBackdrop = rememberLayerBackdrop()
+    // The top material only exists while the page is scrolled.
+    val topEdgeProgress = rememberTopEdgeProgress(scrollState)
+    // Shorter than the shared 56dp bar height: this page has no title living
+    // in the band, so a shallow slab covers the status bar gap plus a sliver
+    // of breathing room and stays out of the first card's way.
+    val topMaterialHeight = contentTopSpace + 24.dp
 
     Box(modifier = modifier.fillMaxSize()) {
         // The bounce is the app-wide translation-only overscroll (see
@@ -285,6 +298,32 @@ private fun ScrollableSettingsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .layerBackdrop(pageBackdrop)
+                // Inside the recorded layer on purpose: the slab above must be
+                // an opaque copy of this, or the sharp page shows through the
+                // blur and ghosts while scrolling.
+                .background(MaterialTheme.colorScheme.background)
+                // Content fades towards the status bar before it is recorded,
+                // so the material never has to cover sharp text with a
+                // half-transparent copy.
+                .scrollEdgeContentFade(
+                    progress = { topEdgeProgress.value },
+                    headerHeight = topMaterialHeight + TopBarSkirt
+                )
+                // Bottom mirror: rows dissolve into the page as they slide
+                // under the pill, the same dissolve-to-background the top
+                // edge does — the mask spans exactly the bottom band and the
+                // opaque column background stays outside the buffer. Always
+                // on, like the band's blur: content rests inside the band
+                // even before the first scroll.
+                .then(
+                    if (!isLandscape) {
+                        Modifier.bottomEdgeContentFade(
+                            bandHeight = BottomBarTopEdge + BottomMeltOverhang
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
                 .verticalScroll(scrollState)
                 .padding(start = contentStart, end = PageEndGutter)
         ) {
@@ -294,37 +333,25 @@ private fun ScrollableSettingsPage(
         }
 
         if (!isLandscape) {
-            // Flush with the pill's top edge, so content is still sharp when it
-            // gets there and only dissolves once it is behind the glass.
-            // +10.dp extends the band past the pill's top edge so the dissolve
-            // starts a bit higher (72dp pill-equivalent instead of the real 60dp).
+            // Anchored below the pill's crown: the radius ramps from exactly
+            // zero at the band's top edge, so the overhang draws no line of
+            // its own — it just moves the melt start higher, so a row is
+            // already slightly soft by the time it meets the glass instead of
+            // changing state at the pill's top edge.
             ProgressiveBottomBlur(
                 backdrop = pageBackdrop,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                bandHeight = BottomBarTopEdge + 10.dp,
+                bandHeight = BottomBarTopEdge + BottomMeltOverhang,
                 maxBlur = 20.dp
             )
         }
 
-        // Top mirror of the bottom band, same parameters: content dissolves
-        // as it scrolls up under the page's top edge.
-        //
-        // Unlike the bottom band there is nothing sitting on top here, so at
-        // rest it would just eat the first row ("语言") while it is still the
-        // page's foremost control. Fade it in over the first 24dp of scroll
-        // instead: sharp at the top of the list, dissolving only once content
-        // actually slides beneath the edge. Read inside graphicsLayer so
-        // scrolling only invalidates the draw phase.
-        val fadeDistancePx = with(LocalDensity.current) { 24.dp.toPx() }
         ProgressiveTopBlur(
             backdrop = pageBackdrop,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .graphicsLayer {
-                    alpha = (scrollState.value / fadeDistancePx).coerceIn(0f, 1f)
-                },
-            bandHeight = contentTopSpace + BottomBarHeight,
-            maxBlur = 20.dp
+            progress = { topEdgeProgress.value },
+            modifier = Modifier.align(Alignment.TopCenter),
+            bandHeight = topMaterialHeight,
+            maxBlur = 18.dp
         )
     }
 }
@@ -359,9 +386,7 @@ private fun PortraitSettingsLayout(
             val valueColor = AppColors.linkColor()
 
             DisplaySectionTitle(stringResource(R.string.display))
-            DisplayCard(cardTextColor, valueColor, viewModel, context) { msg ->
-                scope.launch { snackbarHostState.showSnackbar(msg) }
-            }
+            DisplayCard(cardTextColor, valueColor, viewModel)
 
             DisplaySectionTitle(stringResource(R.string.data_record))
             DataRecordCard(cardTextColor, valueColor, settingsButtonColor, viewModel, recorder, entryCount, duration, scope, snackbarHostState, context, permissionLauncher, saveBinLauncher, saveCsvLauncher, generateFileName)
@@ -400,16 +425,14 @@ private fun LandscapeSettingsLayout(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DisplaySectionTitle(stringResource(R.string.display))
-                DisplayCard(cardTextColor, valueColor, viewModel, context) { msg ->
-                    scope.launch { snackbarHostState.showSnackbar(msg) }
-                }
+                DisplayCard(cardTextColor, valueColor, viewModel)
 
                 DisplaySectionTitle(stringResource(R.string.data_record))
                 DataRecordCard(cardTextColor, valueColor, settingsButtonColor, viewModel, recorder, entryCount, duration, scope, snackbarHostState, context, permissionLauncher, saveBinLauncher, saveCsvLauncher, generateFileName)
@@ -440,9 +463,7 @@ private fun DisplaySectionTitle(title: String) {
 private fun DisplayCard(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color,
-    viewModel: WaveformViewModel,
-    context: android.content.Context,
-    onSnackbar: (String) -> Unit
+    viewModel: WaveformViewModel
 ) {
     @Suppress("UNUSED_VARIABLE")
     val lang = AppSettings.language
@@ -452,10 +473,10 @@ private fun DisplayCard(
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-            LanguageSetting(labelColor, valueColor) { msg -> onSnackbar(msg) }
-            ColorModeSetting(labelColor, valueColor) {
-                onSnackbar(context.getString(R.string.color_mode_changed))
-            }
+            // Everything on this card shows its new value the moment it is
+            // picked, so none of it announces itself with a snackbar.
+            LanguageSetting(labelColor, valueColor)
+            ColorModeSetting(labelColor, valueColor)
             ChartScaleModeSetting(labelColor, valueColor)
             RangeSetting(labelColor, valueColor) { range -> viewModel.setRange(range) }
             AutoConnectSetting(labelColor, valueColor)
@@ -486,9 +507,7 @@ private fun DataRecordCard(
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)) {
-            NotificationSetting(labelColor, valueColor, permissionLauncher) { msg ->
-                scope.launch { snackbarHostState.showSnackbar(msg) }
-            }
+            NotificationSetting(labelColor, valueColor, permissionLauncher)
             RecordingDurationLimitSetting(labelColor, valueColor)
 
             Row(
@@ -701,8 +720,7 @@ private fun SettingRow(
 @Composable
 private fun LanguageSetting(
     labelColor: androidx.compose.ui.graphics.Color,
-    valueColor: androidx.compose.ui.graphics.Color,
-    onChanged: (String) -> Unit
+    valueColor: androidx.compose.ui.graphics.Color
 ) {
     val context = LocalContext.current
     val langCtx = AppSettings.localizedContext(context)
@@ -730,7 +748,6 @@ private fun LanguageSetting(
             onClick = {
                 AppSettings.updateLanguage(AppSettings.Language.SYSTEM)
                 dismiss()
-                onChanged(langCtx.getString(R.string.language_changed_to_system))
             }
         )
         DropdownMenuItem(
@@ -738,7 +755,6 @@ private fun LanguageSetting(
             onClick = {
                 AppSettings.updateLanguage(AppSettings.Language.CHINESE)
                 dismiss()
-                onChanged(langCtx.getString(R.string.language_changed_to_chinese))
             }
         )
         DropdownMenuItem(
@@ -746,7 +762,6 @@ private fun LanguageSetting(
             onClick = {
                 AppSettings.updateLanguage(AppSettings.Language.ENGLISH)
                 dismiss()
-                onChanged(langCtx.getString(R.string.language_changed_to_english))
             }
         )
         DropdownMenuItem(
@@ -754,7 +769,6 @@ private fun LanguageSetting(
             onClick = {
                 AppSettings.updateLanguage(AppSettings.Language.JAPANESE)
                 dismiss()
-                onChanged(langCtx.getString(R.string.language_changed_to_japanese))
             }
         )
     }
@@ -763,8 +777,7 @@ private fun LanguageSetting(
 @Composable
 private fun ColorModeSetting(
     labelColor: androidx.compose.ui.graphics.Color,
-    valueColor: androidx.compose.ui.graphics.Color,
-    onChanged: () -> Unit
+    valueColor: androidx.compose.ui.graphics.Color
 ) {
     val currentMode = AppSettings.colorMode
     val localizedCtx = AppSettings.localizedContext(LocalContext.current)
@@ -789,7 +802,6 @@ private fun ColorModeSetting(
             onClick = {
                 AppSettings.updateColorMode(AppSettings.ColorMode.SYSTEM)
                 dismiss()
-                onChanged()
             }
         )
         DropdownMenuItem(
@@ -797,7 +809,6 @@ private fun ColorModeSetting(
             onClick = {
                 AppSettings.updateColorMode(AppSettings.ColorMode.LIGHT)
                 dismiss()
-                onChanged()
             }
         )
         DropdownMenuItem(
@@ -805,7 +816,6 @@ private fun ColorModeSetting(
             onClick = {
                 AppSettings.updateColorMode(AppSettings.ColorMode.DARK)
                 dismiss()
-                onChanged()
             }
         )
     }
@@ -853,8 +863,7 @@ private fun ChartScaleModeSetting(
 private fun NotificationSetting(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color,
-    permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>,
-    onMessage: (String) -> Unit
+    permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
 ) {
     val context = LocalContext.current
     val enabled = AppSettings.notificationEnabled
@@ -884,13 +893,11 @@ private fun NotificationSetting(
                                 == PackageManager.PERMISSION_GRANTED
                             ) {
                                 AppSettings.updateNotificationEnabled(true)
-                                onMessage(context.getString(R.string.notification_enabled))
                             } else {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
                         } else {
                             AppSettings.updateNotificationEnabled(false)
-                            onMessage(context.getString(R.string.notification_disabled))
                         }
                     },
                 contentAlignment = Alignment.CenterStart

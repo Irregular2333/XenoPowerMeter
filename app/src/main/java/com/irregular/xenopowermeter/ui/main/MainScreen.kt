@@ -71,17 +71,24 @@ fun MainScreen(viewModel: WaveformViewModel) {
             // recompose only their subtrees — never the button bar or the
             // screen-level layout.
             ValuePanel(viewModel)
-            Spacer(Modifier.height(4.dp))
-            ControlBar(
-                isConnected = isConnected,
-                isRecording = isRecording,
-                isLandscape = isLandscape,
-                onConnect = { viewModel.connect() },
-                onDisconnect = { viewModel.disconnect() },
-                onToggleRecording = { viewModel.toggleRecording() },
-                onClear = { viewModel.clearWaveform() }
-            )
-            Spacer(Modifier.height(4.dp))
+            if (!isLandscape) {
+                // Landscape moved the three actions onto the rail's glass
+                // circles (MainActivity → RailActionButton); the column gives
+                // their former rows to the chart.
+                Spacer(Modifier.height(4.dp))
+                ControlBar(
+                    isConnected = isConnected,
+                    isRecording = isRecording,
+                    onConnect = { viewModel.connect() },
+                    onDisconnect = { viewModel.disconnect() },
+                    onToggleRecording = { viewModel.toggleRecording() },
+                    onClear = { viewModel.clearWaveform() }
+                )
+            }
+            // Landscape has no button row between the two cards, so the bare
+            // 4dp portrait gap reads as "the cards are touching". Same 8dp as
+            // the page frame keeps every gap on the screen one rhythm.
+            Spacer(Modifier.height(if (isLandscape) 8.dp else 4.dp))
             WaveformChart(
                 viewModel = viewModel,
                 modifier = Modifier.fillMaxWidth().weight(1f)
@@ -99,7 +106,6 @@ fun MainScreen(viewModel: WaveformViewModel) {
 fun ControlBar(
     isConnected: Boolean,
     isRecording: Boolean,
-    isLandscape: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onToggleRecording: () -> Unit,
@@ -114,6 +120,7 @@ fun ControlBar(
         FilledTonalButton(
             onClick = { if (isConnected) onDisconnect() else onConnect() },
             modifier = modifier,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = connectButtonColor)
         ) {
             val icon = if (isConnected) Icons.Default.LinkOff else Icons.Default.Usb
@@ -126,8 +133,10 @@ fun ControlBar(
     @Composable
     fun RecordButton(modifier: Modifier = Modifier) {
         FilledTonalButton(
-            onClick = onToggleRecording, enabled = isConnected,
+            onClick = onToggleRecording,
+            enabled = isConnected,
             modifier = modifier,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
         ) {
             Icon(if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord, null, Modifier.size(14.dp))
@@ -170,8 +179,10 @@ fun ControlBar(
         }
 
         FilledTonalButton(
-            onClick = { showClearDialog = true }, enabled = !isRecording,
+            onClick = { showClearDialog = true },
+            enabled = !isRecording,
             modifier = modifier,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
             colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
         ) {
             Icon(Icons.Default.Clear, null, Modifier.size(14.dp))
@@ -180,24 +191,13 @@ fun ControlBar(
         }
     }
 
-    if (isLandscape) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            ConnectButton(); ClearButton(); RecordButton()
-        }
-    } else {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ConnectButton(modifier = Modifier.weight(1f).fillMaxWidth())
-                ClearButton(modifier = Modifier.weight(1f).fillMaxWidth())
-            }
-            RecordButton(modifier = Modifier.fillMaxWidth())
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        ConnectButton(modifier = Modifier.weight(1f))
+        ClearButton(modifier = Modifier.weight(1f))
+        RecordButton(modifier = Modifier.weight(1f))
     }
 }
 
@@ -232,7 +232,7 @@ fun ValuePanel(viewModel: WaveformViewModel) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = if (isLandscape) 8.dp else 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -344,7 +344,16 @@ fun WaveformChart(
     val isLandscape = screenWidth > screenHeight
     val numTimeTicks = if (isLandscape) 8 else 5
 
-    val windowEnd = if (data.isNotEmpty()) data.last().third else visibleTimeMs
+    // The window rides on the newest sample so the trace scrolls under a fixed
+    // "now" at the right edge. A session that was just started has no full
+    // window of history behind it though, and anchoring on its first samples
+    // pushed the axis into negative time ("-7s ... 0s"). While the session is
+    // younger than one window the axis therefore stays at [0, span] and the
+    // trace grows in from the left edge; at the moment elapsed reaches the span
+    // both rules give the same window, so the hand-over is seamless rather than
+    // a jump.
+    val sessionEnd = if (data.isNotEmpty()) data.last().third else 0L
+    val windowEnd = maxOf(sessionEnd, visibleTimeMs)
     val windowStart = windowEnd - visibleTimeMs
 
     val niceRange = remember(data, AppSettings.chartScaleMode) {
@@ -399,6 +408,11 @@ fun WaveformChart(
         android.graphics.Paint().apply {
             color = axisLabelColor.hashCode(); textSize = timeTextSizePx
             isAntiAlias = true; isFakeBoldText = true
+            // Centred on its gridline: the old LEFT alignment compensated for
+            // a two-character "0s" with a fixed 7dp nudge, which only happens
+            // to be half a label. Once the axis reaches "2m05s" that nudge is
+            // nowhere near half a label and both end ticks ran into the plot.
+            textAlign = android.graphics.Paint.Align.CENTER
         }
     }
 
@@ -468,15 +482,17 @@ fun WaveformChart(
                     val timeMs = windowStart + (fraction * visibleTimeMs).toLong()
                     drawContext.canvas.nativeCanvas.drawLine(x, chartTop, x, chartBottom, gridPaint)
                     val totalSec = timeMs / 1000
-                    // Sub-minute windows show plain seconds ("0s".."8s");
-                    // longer windows use "1m30s" style.
-                    val timeLabel = if (visibleTimeMs < 60_000L) {
+                    // Seconds while the tick is still in the first minute,
+                    // minutes once it is past it ("59s", "1m00s"). The old test
+                    // looked at the window *length* — always 5 s or 8 s — so a
+                    // two-minute session kept labelling its axis "125s".
+                    val timeLabel = if (totalSec < 60L) {
                         String.format("%ds", totalSec)
                     } else {
                         String.format("%dm%02ds", totalSec / 60, totalSec % 60)
                     }
                     drawContext.canvas.nativeCanvas.drawText(
-                        timeLabel, x - 7.dp.toPx(), chartBottom + (bottomPad - 4.dp.toPx()), timePaint
+                        timeLabel, x, chartBottom + (bottomPad - 4.dp.toPx()), timePaint
                     )
                 }
 

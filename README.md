@@ -48,8 +48,10 @@ app/src/main/java/com/irregular/xenopowermeter/
 │   ├── GlassRim.kt                     // 玻璃边缘高光/描边样式
 │   ├── ProgressiveBlur.kt              // 渐进模糊
 │   ├── BouncyOverscroll.kt             // 弹性回弹效果
+│   ├── TabletLayout.kt                 // 平板设备判断与横竖屏布局切换
 │   ├── main/
-│   │   └── MainScreen.kt               // 主界面(波形图表/测量数据/网格渲染)
+│   │   ├── MainScreen.kt               // 主界面(波形图表/测量数据/网格渲染)
+│   │   └── ChartAxis.kt                // 图表坐标轴(刻度计算与轴标签绘制)
 │   ├── settings/
 │   │   └── SettingsScreen.kt           // 设置页(采样/校准/显示项配置)
 │   ├── about/
@@ -61,7 +63,12 @@ app/src/main/java/com/irregular/xenopowermeter/
 │       ├── Theme.kt                    // Material3主题配置
 │       └── Color.kt                    // 自定义颜色定义
 ├── viewmodel/
-│   └── WaveformViewModel.kt            // 核心:数据采集/波形图表/状态管理
+│   ├── WaveformViewModel.kt            // 核心:数据采集/波形图表/状态管理
+│   ├── PowerStatistics.kt              // 功率统计
+│   ├── WaveformPoint.kt                // 波形数据点模型
+│   ├── WaveformTimeline.kt             // 波形时间轴
+│   ├── WaveformDownsampler.kt          // 波形降采样
+│   └── WaveformStartupGate.kt          // 波形显示启动门控
 ├── data/
 │   ├── model/
 │   │   ├── UsbAdcPacket.kt             // USB数据包模型

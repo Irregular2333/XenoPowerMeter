@@ -14,15 +14,19 @@
     <string name="record">記録開始</string>
     <string name="stop">記録停止</string>
     <string name="clear">データ消去</string>
+    <string name="clear_waveform">波形を消去</string>
+    <string name="clear_waveform_confirm_title">グラフデータを消去</string>
+    <string name="clear_waveform_confirm_message">現在の波形と統計データを消去しますか？</string>
     <string name="range">レンジ</string>
 
     <!-- Settings Screen -->
-    <string name="data_record">データ記録</string>
+    <string name="data_record">デバイス</string>
     <string name="record_count_label">記録データ数</string>
     <string name="recording_value">%d 件</string>
     <string name="record_duration_label">記録時間</string>
     <string name="duration_value">%.2fs</string>
     <string name="export_recorded_data">記録データをエクスポート</string>
+    <string name="export_data">データ出力</string>
     <string name="export_option_bin">.bin ファイルをエクスポート</string>
     <string name="export_option_csv">.csv ファイルをエクスポート</string>
     <string name="export_bin_success">%1$d 件のデータを %2$s にエクスポートしました</string>
@@ -69,6 +73,8 @@
     <string name="event_connected">デバイスが接続されました</string>
     <string name="recording_start_failed">記録を開始できませんでした</string>
     <string name="recording_lost">記録が中断されました（書き込みエラー）</string>
+    <string name="recording_auto_stopped">記録時間上限に達したため、記録を自動的に停止しました</string>
+    <string name="recording_disconnected">デバイスが切断されたため、記録を停止しました</string>
     <string name="event_disconnected">デバイスが切断されました</string>
     <string name="event_no_device">デバイスが見つかりません</string>
     <string name="event_permission_denied">USB権限が拒否されました</string>
@@ -76,6 +82,7 @@
     <string name="event_no_port">シリアルポートが見つかりません</string>
     <string name="event_connect_failed">接続に失敗しました：%1$s</string>
     <string name="event_read_error">読み取りエラー、接続が切断されました</string>
+    <string name="event_sample_queue_overflow">サンプル処理が追いつかないため、記録の不整合を防ぐため接続を切断しました</string>
 
     <!-- Export -->
     <string name="export_need_pause">エクスポート前に記録を停止してください</string>
@@ -95,6 +102,18 @@
     <string name="back">戻る</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_0">
+        <item>アプリの表示を改善</item>
+        <item>タブレット表示の切り替えロジックを改善</item>
+        <item>USB初期化のロジックを改善</item>
+        <item>データ記録時のサンプリングロジックを改善</item>
+        <item>設定項目の並びとグループ分けを改善</item>
+        <item>記録中のアプリ内の表示を改善</item>
+        <item>アプリのADCスケールが正しくない問題を修正</item>
+        <item>デバイス接続時にまれにデータを記録できない問題を修正</item>
+        <item>デバイス接続時にグリッドが正しく描画されない問題を修正</item>
+        <item>タイムスタンプのせいでファイル出力が失敗する問題を修正</item>
+    </string-array>
     <string-array name="changelog_2_1_0">
         <item>グラフの表示の問題と単位の誤りを修正</item>
         <item>ホーム画面の表示を改善</item>

@@ -19,9 +19,9 @@ android {
     defaultConfig {
         applicationId = "com.irregular.xenopowermeter"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 2001000
-        versionName = "2.1.0"
+        targetSdk = 36
+        versionCode = 2002000
+        versionName = "2.2.0"
 
         // Bake the build date into the APK at compile time (zip entry
         // timestamps are normalized by the toolchain, so the About page
@@ -60,6 +60,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+
     implementation(project(":backdrop"))
 
     // Compose BOM

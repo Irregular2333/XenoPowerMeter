@@ -4,9 +4,10 @@ import com.irregular.xenopowermeter.data.model.Calibration
 
 object DataConverter {
 
-    private const val SCALE_LOW = 3.0f / 4095.0f / 50.0f / 50.0f * 1_000_000f
-    private const val SCALE_MID = 3.0f / 4095.0f / 50.0f / 0.5f * 1_000_000f
-    private const val SCALE_HIGH = 3.0f / 4095.0f / 50.0f / 0.005f * 1_000_000f
+    // Match the firmware's current conversion: one 12-bit ADC LSB is Vref/4096.
+    private const val SCALE_LOW = 3.0f / 4096.0f / 50.0f / 50.0f * 1_000_000f
+    private const val SCALE_MID = 3.0f / 4096.0f / 50.0f / 0.5f * 1_000_000f
+    private const val SCALE_HIGH = 3.0f / 4096.0f / 50.0f / 0.005f * 1_000_000f
 
     fun convertVoltage(volAdc: Int): Float {
         return volAdc * (3.0f / 4095.0f * 11.0f)

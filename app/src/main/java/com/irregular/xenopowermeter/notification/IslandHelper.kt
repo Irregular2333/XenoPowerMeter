@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.Bundle
+import androidx.core.app.NotificationCompat
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.converter.DataConverter
 import org.json.JSONObject
@@ -51,6 +53,8 @@ object IslandHelper {
     }
 
     private fun createChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.island_channel_name),
@@ -100,10 +104,14 @@ object IslandHelper {
             isRecording = isRecording
         )
 
-        val builder = Notification.Builder(context, CHANNEL_ID)
+        // NotificationCompat ignores the channel on API 24/25 and uses the
+        // channel created above on API 26+, matching the application's minSdk.
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("XenoPowerMeter")
             .setContentText("$voltageStr | $currentStr | $powerStr")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
             .setOngoing(true)
 
         val picsBundle = Bundle().apply {
@@ -119,6 +127,12 @@ object IslandHelper {
             context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        builder.setContentIntent(pendingIntent)
+            .addAction(
+                R.drawable.ic_notification,
+                context.getString(R.string.island_open_app),
+                pendingIntent
+            )
         val action = Notification.Action.Builder(
             Icon.createWithResource(context, R.drawable.app_icon),
             context.getString(R.string.island_open_app),

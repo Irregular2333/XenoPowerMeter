@@ -14,15 +14,19 @@
     <string name="record">Start Recording</string>
     <string name="stop">Stop Recording</string>
     <string name="clear">Clear Data</string>
+    <string name="clear_waveform">Clear Waveform</string>
+    <string name="clear_waveform_confirm_title">Clear Chart Data</string>
+    <string name="clear_waveform_confirm_message">Clear the waveform and live statistics?</string>
     <string name="range">Range</string>
 
     <!-- Settings Screen -->
-    <string name="data_record">Data Recording</string>
+    <string name="data_record">Device</string>
     <string name="record_count_label">Recorded samples</string>
     <string name="recording_value">%d samples</string>
     <string name="record_duration_label">Recording duration</string>
     <string name="duration_value">%.2fs</string>
     <string name="export_recorded_data">Export recorded data</string>
+    <string name="export_data">Export Data</string>
     <string name="export_option_bin">Export .bin file</string>
     <string name="export_option_csv">Export .csv file</string>
     <string name="export_bin_success">Exported %1$d records to %2$s</string>
@@ -76,6 +80,8 @@
     <string name="event_connected">Device connected</string>
     <string name="recording_start_failed">Recording failed to start</string>
     <string name="recording_lost">Recording was interrupted (write error)</string>
+    <string name="recording_auto_stopped">Recording stopped automatically (time limit reached)</string>
+    <string name="recording_disconnected">Recording stopped because the device disconnected</string>
     <string name="event_disconnected">Device disconnected</string>
     <string name="event_no_device">No device found</string>
     <string name="event_permission_denied">USB permission denied</string>
@@ -83,6 +89,7 @@
     <string name="event_no_port">No serial port found</string>
     <string name="event_connect_failed">Connection failed: %1$s</string>
     <string name="event_read_error">Read error, connection lost</string>
+    <string name="event_sample_queue_overflow">Sample processing fell behind; connection closed to protect recording integrity</string>
 
     <!-- Export -->
     <string name="export_need_pause">Please stop recording before exporting</string>
@@ -102,6 +109,18 @@
     <string name="back">Back</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_0">
+        <item>Improved the app\'s visual presentation</item>
+        <item>Improved the tablet display switching logic</item>
+        <item>Improved the USB initialization logic</item>
+        <item>Improved the sampling logic while recording data</item>
+        <item>Improved the ordering and grouping of settings options</item>
+        <item>Improved the in-app prompts during recording</item>
+        <item>Fixed an incorrect ADC scale in the app</item>
+        <item>Fixed an issue where recording sometimes failed after connecting a device</item>
+        <item>Fixed an issue where the chart grid was drawn incorrectly after connecting a device</item>
+        <item>Fixed an issue where exporting a file could fail due to its timestamp</item>
+    </string-array>
     <string-array name="changelog_2_1_0">
         <item>Fixed chart display errors and incorrect units</item>
         <item>Improved the home page</item>

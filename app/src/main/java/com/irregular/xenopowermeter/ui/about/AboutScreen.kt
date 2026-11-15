@@ -42,6 +42,7 @@ import com.irregular.xenopowermeter.ui.BottomMeltOverhang
 import com.irregular.xenopowermeter.ui.bottomEdgeContentFade
 import com.irregular.xenopowermeter.ui.PageEndGutter
 import com.irregular.xenopowermeter.ui.RailPageStart
+import com.irregular.xenopowermeter.ui.isTabletLandscape
 import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -64,8 +65,7 @@ private val dimColorMatrix = ColorMatrix(
 @Composable
 fun AboutScreen(onOpenChangelog: () -> Unit) {
     val screenHeightDp = LocalConfiguration.current.screenHeightDp
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val isLandscape = screenWidthDp > screenHeightDp
+    val isLandscape = isTabletLandscape()
     val view = LocalView.current
     val context = LocalContext.current
 
@@ -132,7 +132,7 @@ private fun AboutPage(
     // Landscape puts the bar on the start edge, so the cards clear it
     // sideways and the bottom is free again. Same shared start edge as Main
     // and Settings.
-    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    val isLandscape = isTabletLandscape()
     val contentStart = if (isLandscape) RailPageStart else 16.dp
 
     // Same rest space as Settings: the last card stops right at the band's top
@@ -308,7 +308,7 @@ private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp, modifie
         Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalAlignment = Alignment.Bottom
         ) {
             Image(
@@ -333,10 +333,13 @@ private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp, modifie
                     text = stringResource(R.string.about_description),
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 13.sp,
+                    // No fixed width cap: the blurb stays on one line whenever
+                    // the available width allows it, and only wraps to the
+                    // second line when it physically doesn't fit. maxLines = 2
+                    // plus the Row's 16dp end padding handle narrow screens.
                     maxLines = 2,
                     textAlign = TextAlign.Start,
                     lineHeight = 16.sp,
-                    modifier = Modifier.widthIn(max = 240.dp),
                     style = androidx.compose.ui.text.TextStyle(
                         shadow = Shadow(
                             color = Color.Black.copy(alpha = 0.7f),
@@ -370,13 +373,17 @@ private fun VersionInfoCard(onOpenChangelog: () -> Unit) {
 
     // Version comes from the installed manifest; the build date is baked
     // into the APK as a BuildConfig field at compile time (the toolchain
-    // normalizes zip entry timestamps, so those can't be trusted).
+    // normalizes zip entry timestamps, so those can't be trusted). The
+    // build-type suffix makes it obvious which APK the user is looking at —
+    // "2.1.0-Debug" vs "2.1.0-Release".
     val versionName = remember {
-        try {
+        val base = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "--"
         } catch (e: Exception) {
             "--"
         }
+        val suffix = if (com.irregular.xenopowermeter.BuildConfig.DEBUG) "Debug" else "Release"
+        if (base == "--") base else "$base-$suffix"
     }
     val buildDate = remember { com.irregular.xenopowermeter.BuildConfig.BUILD_DATE }
 

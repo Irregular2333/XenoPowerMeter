@@ -1,19 +1,33 @@
 package com.irregular.xenopowermeter.ui.main
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -31,27 +45,24 @@ import androidx.compose.ui.unit.sp
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.data.converter.DataConverter
+import com.irregular.xenopowermeter.ui.BarPressState
+import com.irregular.xenopowermeter.ui.GlassRimHighlight
+import com.irregular.xenopowermeter.ui.RecordingRimHighlight
+import com.irregular.xenopowermeter.ui.barPressSource
+import com.irregular.xenopowermeter.ui.isTabletLandscape
 import com.irregular.xenopowermeter.ui.theme.AppColors
+import com.kyant.backdrop.backdrops.emptyBackdrop
+import com.kyant.backdrop.drawBackdrop
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
-import kotlin.math.pow
 
 @Composable
 fun MainScreen(viewModel: WaveformViewModel) {
     val isConnected by viewModel.isConnected.collectAsState()
     val isRecording by viewModel.recorder.isRecording.collectAsState()
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp
-    val isLandscape = screenWidthDp > screenHeightDp
-    val snackbarHostState = remember { SnackbarHostState() }
+    val isLandscape = isTabletLandscape()
 
     LaunchedEffect(isLandscape) {
         viewModel.setOrientation(isLandscape)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.connectionEvents.collect { message ->
-            snackbarHostState.showSnackbar(message)
-        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -75,7 +86,7 @@ fun MainScreen(viewModel: WaveformViewModel) {
                 // Landscape moved the three actions onto the rail's glass
                 // circles (MainActivity → RailActionButton); the column gives
                 // their former rows to the chart.
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
                 ControlBar(
                     isConnected = isConnected,
                     isRecording = isRecording,
@@ -85,19 +96,107 @@ fun MainScreen(viewModel: WaveformViewModel) {
                     onClear = { viewModel.clearWaveform() }
                 )
             }
-            // Landscape has no button row between the two cards, so the bare
-            // 4dp portrait gap reads as "the cards are touching". Same 8dp as
-            // the page frame keeps every gap on the screen one rhythm.
-            Spacer(Modifier.height(if (isLandscape) 8.dp else 4.dp))
+            // Keep the action row separated from both the readings and chart.
+            Spacer(Modifier.height(8.dp))
             WaveformChart(
                 viewModel = viewModel,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
+    }
+}
+
+/**
+ * A pill of the same glass as the landscape action circles: the rim catches
+ * the 45° light, a press dips the pill under a spring and pools light at the
+ * finger. No ripple on purpose — glass answers with light, not ink. Disabled
+ * pills neither react nor light up: their surface falls back to the muted
+ * gray the old FilledTonalButtons used, and their content dims with it.
+ */
+@Composable
+private fun GlassPill(
+    onClick: () -> Unit,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    recording: Boolean = false,
+    content: @Composable RowScope.() -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val pressState = remember(scope) { BarPressState(scope) }
+    // A disabled pill drops its tint for the Material3 disabled-container
+    // gray, so e.g. "record" without a device still reads as off — the old
+    // FilledTonalButton look — instead of a pale but colored pill.
+    // The red recording glass is blended upstream (RecordButton cross-fades
+    // the tint), so the pill never hard-swaps between teal and red.
+    val isRecordingPill = recording
+    val surfaceTint = if (enabled) tint
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    // Deep surfaces take a stronger halo; on a pale one the same alpha clips
+    // to outright white instead of reading as light. These pills are small,
+    // so the pool runs hotter and tighter than the bar's — at the bar's
+    // levels the light measured +5 brightness, invisible under a thumb.
+    val haloPeak = if (surfaceTint.luminance() < 0.5f) 0.13f else 0.085f
+    val surface = remember(surfaceTint, haloPeak, isRecordingPill) {
+        Modifier.drawBackdrop(
+            backdrop = emptyBackdrop(),
+            shape = { RoundedCornerShape(50) },
+            effects = {},
+            highlight = if (isRecordingPill) RecordingRimHighlight else GlassRimHighlight,
+            shadow = null,
+            innerShadow = null,
+            onDrawSurface = {
+                drawRect(surfaceTint)
+            },
+            onDrawFront = {
+                val progress = pressState.progress.value
+                if (progress > 0.001f) {
+                    val center = pressState.finger.value
+                    val radius = size.minDimension * 1.3f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to Color.White.copy(alpha = haloPeak * progress),
+                            0.5f to Color.White.copy(alpha = haloPeak * progress),
+                            1f to Color.Transparent,
+                            center = center,
+                            radius = radius
+                        ),
+                        radius = radius,
+                        center = center,
+                        blendMode = BlendMode.Plus
+                    )
+                }
+            }
+        )
+    }
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            // The scale wraps the glass too, so the pill grows as one piece.
+            .graphicsLayer {
+                val scale = 1f + 0.05f * pressState.progress.value
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(surface)
+            // Disabled pills stay inert: no press tracking, no light.
+            .then(if (enabled) Modifier.barPressSource(pressState) else Modifier)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .defaultMinSize(minHeight = 40.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .alpha(if (enabled) 1f else 0.45f),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
         )
     }
 }
@@ -117,32 +216,53 @@ fun ControlBar(
 
     @Composable
     fun ConnectButton(modifier: Modifier = Modifier) {
-        FilledTonalButton(
+        GlassPill(
             onClick = { if (isConnected) onDisconnect() else onConnect() },
-            modifier = modifier,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(containerColor = connectButtonColor)
+            tint = connectButtonColor,
+            modifier = modifier
         ) {
             val icon = if (isConnected) Icons.Default.LinkOff else Icons.Default.Usb
-            Icon(icon, null, Modifier.size(14.dp))
-            Spacer(Modifier.width(3.dp))
-            Text(if (isConnected) stringResource(R.string.disconnect) else stringResource(R.string.connect), fontSize = 13.sp, color = buttonTextColor)
+            AutoSizeButtonContent(
+                icon = icon,
+                text = if (isConnected) stringResource(R.string.disconnect) else stringResource(R.string.connect),
+                color = buttonTextColor
+            )
         }
     }
 
     @Composable
     fun RecordButton(modifier: Modifier = Modifier) {
-        FilledTonalButton(
+        // Cross-fade the pill between the regular teal glass and the red
+        // recording glass, so start/stop reads as a colour shift instead of
+        // an instant swap.
+        val transition by animateFloatAsState(
+            targetValue = if (isRecording) 1f else 0f,
+            animationSpec = tween(durationMillis = 500),
+            label = "recordColorTransition"
+        )
+        val pillTint = lerp(barColor, lerp(barColor, Color(0xFFE53935), 0.62f), transition)
+        val contentColor by animateColorAsState(
+            targetValue = if (isRecording) Color.White else buttonTextColor,
+            animationSpec = tween(durationMillis = 500),
+            label = "recordContentColor"
+        )
+        val content: @Composable RowScope.() -> Unit = {
+            AutoSizeButtonContent(
+                icon = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                text = if (isRecording) stringResource(R.string.stop) else stringResource(R.string.record),
+                // The recording pill is red glass — white content keeps the
+                // contrast on both the light and dark red base.
+                color = contentColor
+            )
+        }
+        GlassPill(
             onClick = onToggleRecording,
             enabled = isConnected,
+            tint = pillTint,
             modifier = modifier,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
-        ) {
-            Icon(if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord, null, Modifier.size(14.dp))
-            Spacer(Modifier.width(3.dp))
-            Text(if (isRecording) stringResource(R.string.stop) else stringResource(R.string.record), fontSize = 13.sp, color = buttonTextColor)
-        }
+            recording = isRecording,
+            content = content
+        )
     }
 
     @Composable
@@ -154,8 +274,8 @@ fun ControlBar(
             // hot language switch provably re-resolves — and pass them in as
             // plain values. A Dialog captures its locals when it opens, so
             // stringResource inside the dialog can lag a language switch.
-            val title = stringResource(R.string.clear_confirm_title)
-            val message = stringResource(R.string.clear_confirm_message)
+            val title = stringResource(R.string.clear_waveform_confirm_title)
+            val message = stringResource(R.string.clear_waveform_confirm_message)
             val confirmLabel = stringResource(R.string.confirm_clear)
             val cancelLabel = stringResource(R.string.cancel)
             AlertDialog(
@@ -178,16 +298,17 @@ fun ControlBar(
             )
         }
 
-        FilledTonalButton(
+        GlassPill(
             onClick = { showClearDialog = true },
             enabled = !isRecording,
-            modifier = modifier,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(containerColor = barColor)
+            tint = barColor,
+            modifier = modifier
         ) {
-            Icon(Icons.Default.Clear, null, Modifier.size(14.dp))
-            Spacer(Modifier.width(3.dp))
-            Text(stringResource(R.string.clear), fontSize = 13.sp, color = buttonTextColor)
+            AutoSizeButtonContent(
+                icon = Icons.Default.Clear,
+                text = stringResource(R.string.clear_waveform),
+                color = buttonTextColor
+            )
         }
     }
 
@@ -198,6 +319,46 @@ fun ControlBar(
         ConnectButton(modifier = Modifier.weight(1f))
         ClearButton(modifier = Modifier.weight(1f))
         RecordButton(modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun AutoSizeButtonContent(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    color: Color
+) {
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        val textMaxWidth = (maxWidth - 17.dp).coerceAtLeast(0.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(3.dp))
+            // Platform auto-size (BasicText + TextAutoSize): the font size is
+            // stepped down inside the real layout pipeline, so the label is
+            // guaranteed to fit its constraints. The hand-rolled TextMeasurer
+            // estimator this replaced could disagree with the actual render
+            // and let "Connect Device" overflow the pill's right edge on
+            // narrow phones.
+            BasicText(
+                text = text,
+                modifier = Modifier.widthIn(max = textMaxWidth),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = 7.sp,
+                    maxFontSize = 13.sp,
+                    stepSize = 0.5.sp
+                ),
+                style = TextStyle(
+                    color = color,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.SansSerif,
+                    textAlign = TextAlign.Start
+                )
+            )
+        }
     }
 }
 
@@ -214,8 +375,7 @@ fun ValuePanel(viewModel: WaveformViewModel) {
     val powerColor = AppColors.powerColor()
     val avgPowerColor = AppColors.avgPowerColor()
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp
-    val isLandscape = screenWidthDp > screenHeightDp
+    val isLandscape = isTabletLandscape()
     val valueFontSize = when {
         isLandscape -> 20.sp
         screenWidthDp < 360 -> 13.sp
@@ -226,48 +386,132 @@ fun ValuePanel(viewModel: WaveformViewModel) {
         screenWidthDp < 360 -> 10.sp
         else -> 11.sp
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    val readingLineHeightMultiplier = if (isLandscape) 1.25f else 1.08f
+    val readingPairGap = if (isLandscape) 4.dp else 5.dp
+    // Keep the card's original height while compacting the label/value pair.
+    val readingColumnHeight = with(LocalDensity.current) {
+        MaterialTheme.typography.bodyLarge.lineHeight.toDp() * 2f
+    }
+    // The reading card is its own piece of glass, same as the changelog's
+    // back disc: an empty backdrop, the card colour drawn as the surface and
+    // the shared rim highlight catching the 45° light along the top-left arc.
+    // That whisper of light lifts the card off the page without the drawn
+    // outline an accent border made.
+    //
+    // Pressing answers like the bar does: the card dips to the finger under a
+    // spring, and a pool of light follows the finger while it's down. The
+    // press values are read inside draw, so a press only invalidates the draw
+    // phase — not this modifier, and not the composition.
+    val scope = rememberCoroutineScope()
+    val pressState = remember(scope) { BarPressState(scope) }
+    // Deep surfaces take a stronger halo; on a pale one the same alpha clips
+    // to outright white instead of reading as light.
+    val haloPeak = if (cardColor.luminance() < 0.5f) 0.10f else 0.045f
+    val surface = remember(cardColor, haloPeak) {
+        Modifier.drawBackdrop(
+            backdrop = emptyBackdrop(),
+            shape = { RoundedCornerShape(12.dp) },
+            effects = {},
+            highlight = GlassRimHighlight,
+            shadow = null,
+            innerShadow = null,
+            onDrawSurface = { drawRect(cardColor) },
+            onDrawFront = {
+                val progress = pressState.progress.value
+                if (progress > 0.001f) {
+                    // The card brightens a touch...
+                    drawRect(
+                        Color.White.copy(alpha = 0.03f * progress),
+                        blendMode = BlendMode.Plus
+                    )
+                    // ...and a soft disc sits under the finger, solid to half
+                    // its radius with a long falloff — light pooling in the
+                    // glass, not a dot painted on top.
+                    val center = pressState.finger.value
+                    val radius = size.minDimension * 1.5f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to Color.White.copy(alpha = haloPeak * progress),
+                            0.5f to Color.White.copy(alpha = haloPeak * progress),
+                            1f to Color.Transparent,
+                            center = center,
+                            radius = radius
+                        ),
+                        radius = radius,
+                        center = center,
+                        blendMode = BlendMode.Plus
+                    )
+                }
+            }
+        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // The scale wraps the glass too, so the card grows as one piece.
+            .graphicsLayer {
+                val scale = 1f + 0.03f * pressState.progress.value
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(surface)
+            // Tracks the press without consuming it; the card stays
+            // non-clickable, it just answers the touch like glass.
+            .barPressSource(pressState)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = if (isLandscape) 8.dp else 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.voltage_label), fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+            Column(
+                modifier = Modifier.weight(1f).height(readingColumnHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(readingPairGap, Alignment.CenterVertically)
+            ) {
+                Text(stringResource(R.string.voltage_label), fontSize = labelFontSize, lineHeight = labelFontSize * readingLineHeightMultiplier, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                 if (isLandscape) {
-                    Text(DataConverter.formatVoltage(voltage), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = voltageColor, textAlign = TextAlign.Center)
+                    Text(DataConverter.formatVoltage(voltage), fontSize = valueFontSize, lineHeight = valueFontSize * readingLineHeightMultiplier, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = voltageColor, textAlign = TextAlign.Center)
                 } else {
-                    AutoSizeText(DataConverter.formatVoltage(voltage), maxFontSize = valueFontSize, minFontSize = 8.sp, color = voltageColor)
+                    AutoSizeText(DataConverter.formatVoltage(voltage), maxFontSize = valueFontSize, minFontSize = 8.sp, color = voltageColor, lineHeight = valueFontSize * readingLineHeightMultiplier)
                 }
             }
             Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.current_label), fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+            Column(
+                modifier = Modifier.weight(1f).height(readingColumnHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(readingPairGap, Alignment.CenterVertically)
+            ) {
+                Text(stringResource(R.string.current_label), fontSize = labelFontSize, lineHeight = labelFontSize * readingLineHeightMultiplier, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                 if (isLandscape) {
-                    Text(DataConverter.formatCurrent(current), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = currentColor, textAlign = TextAlign.Center)
+                    Text(DataConverter.formatCurrent(current), fontSize = valueFontSize, lineHeight = valueFontSize * readingLineHeightMultiplier, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = currentColor, textAlign = TextAlign.Center)
                 } else {
-                    AutoSizeText(DataConverter.formatCurrent(current), maxFontSize = valueFontSize, minFontSize = 8.sp, color = currentColor)
+                    AutoSizeText(DataConverter.formatCurrent(current), maxFontSize = valueFontSize, minFontSize = 8.sp, color = currentColor, lineHeight = valueFontSize * readingLineHeightMultiplier)
                 }
             }
             Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.power_label), fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+            Column(
+                modifier = Modifier.weight(1f).height(readingColumnHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(readingPairGap, Alignment.CenterVertically)
+            ) {
+                Text(stringResource(R.string.power_label), fontSize = labelFontSize, lineHeight = labelFontSize * readingLineHeightMultiplier, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                 if (isLandscape) {
-                    Text(DataConverter.formatPower(voltage * current / 1_000_000f), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = powerColor, textAlign = TextAlign.Center)
+                    Text(DataConverter.formatPower(voltage * current / 1_000_000f), fontSize = valueFontSize, lineHeight = valueFontSize * readingLineHeightMultiplier, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = powerColor, textAlign = TextAlign.Center)
                 } else {
-                    AutoSizeText(DataConverter.formatPower(voltage * current / 1_000_000f), maxFontSize = valueFontSize, minFontSize = 8.sp, color = powerColor)
+                    AutoSizeText(DataConverter.formatPower(voltage * current / 1_000_000f), maxFontSize = valueFontSize, minFontSize = 8.sp, color = powerColor, lineHeight = valueFontSize * readingLineHeightMultiplier)
                 }
             }
             Box(Modifier.width(1.dp).height(32.dp).align(Alignment.CenterVertically).background(dividerColor))
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.avg_power_label), fontSize = labelFontSize, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+            Column(
+                modifier = Modifier.weight(1f).height(readingColumnHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(readingPairGap, Alignment.CenterVertically)
+            ) {
+                Text(stringResource(R.string.avg_power_label), fontSize = labelFontSize, lineHeight = labelFontSize * readingLineHeightMultiplier, color = labelColor, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                 if (isLandscape) {
-                    Text(DataConverter.formatPower(avgPower), fontSize = valueFontSize, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = avgPowerColor, textAlign = TextAlign.Center)
+                    Text(DataConverter.formatPower(avgPower), fontSize = valueFontSize, lineHeight = valueFontSize * readingLineHeightMultiplier, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = avgPowerColor, textAlign = TextAlign.Center)
                 } else {
-                    AutoSizeText(DataConverter.formatPower(avgPower), maxFontSize = valueFontSize, minFontSize = 8.sp, color = avgPowerColor)
+                    AutoSizeText(DataConverter.formatPower(avgPower), maxFontSize = valueFontSize, minFontSize = 8.sp, color = avgPowerColor, lineHeight = valueFontSize * readingLineHeightMultiplier)
                 }
             }
         }
@@ -280,20 +524,26 @@ private fun AutoSizeText(
     maxFontSize: TextUnit,
     minFontSize: TextUnit,
     color: Color,
+    modifier: Modifier = Modifier,
     fontWeight: FontWeight = FontWeight.Bold,
-    fontFamily: FontFamily = FontFamily.Monospace
+    fontFamily: FontFamily = FontFamily.Monospace,
+    textAlign: TextAlign = TextAlign.Center,
+    // Tight leading like the label/landscape texts; without it the value
+    // inherits the theme's roomy bodyLarge line height, which pads the pair
+    // asymmetrically and makes the column look off-centre.
+    lineHeight: TextUnit = TextUnit.Unspecified
 ) {
     // Direct TextMeasurer shrink: a linear estimate from one full-size layout
     // plus a step-down verify — at most 2-3 plain text layouts per text change.
     // The subcompose-based linear search this replaces re-ran up to 8
     // sub-compositions per value at 1 Hz forever.
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier = modifier) {
         val maxWidthPx = constraints.maxWidth
         val measurer = rememberTextMeasurer()
         val style = TextStyle(
             fontWeight = fontWeight,
             fontFamily = fontFamily,
-            textAlign = TextAlign.Center
+            textAlign = textAlign
         )
         val fontSize = remember(text, maxWidthPx) {
             var size = maxFontSize
@@ -316,12 +566,13 @@ private fun AutoSizeText(
         }
         Text(
             text,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier,
             fontSize = fontSize,
+            lineHeight = lineHeight,
             fontWeight = fontWeight,
             fontFamily = fontFamily,
             color = color,
-            textAlign = TextAlign.Center,
+            textAlign = textAlign,
             maxLines = 1
         )
     }
@@ -340,8 +591,7 @@ fun WaveformChart(
     val voltageColor = AppColors.voltageColor()
     val currentColor = AppColors.currentColor()
     val screenWidth = LocalConfiguration.current.screenWidthDp
-    val screenHeight = LocalConfiguration.current.screenHeightDp
-    val isLandscape = screenWidth > screenHeight
+    val isLandscape = isTabletLandscape()
     val numTimeTicks = if (isLandscape) 8 else 5
 
     // The window rides on the newest sample so the trace scrolls under a fixed
@@ -352,27 +602,28 @@ fun WaveformChart(
     // trace grows in from the left edge; at the moment elapsed reaches the span
     // both rules give the same window, so the hand-over is seamless rather than
     // a jump.
-    val sessionEnd = if (data.isNotEmpty()) data.last().third else 0L
+    val sessionEnd = if (data.isNotEmpty()) data.last().timeMs else 0L
     val windowEnd = maxOf(sessionEnd, visibleTimeMs)
     val windowStart = windowEnd - visibleTimeMs
 
     val niceRange = remember(data, AppSettings.chartScaleMode) {
         if (AppSettings.chartScaleMode == AppSettings.ChartScaleMode.FULL_RANGE) {
-            NiceAxisRange(0f, 33f, 5f, 7) to NiceAxisRange(0f, 12_000_000f, 2_000_000f, 6)
+            FullRangeVoltageAxis to FullRangeCurrentAxis
         } else if (data.isEmpty()) {
-            NiceAxisRange(0f, 1f, 0.1f, 10) to NiceAxisRange(0f, 1000f, 200f, 5)
+            NiceAxisRange(0f, 0.1f, 10) to NiceAxisRange(0f, 200f, 5)
         } else {
-            val vDataMin = data.minOf { it.first }
-            val vDataMax = data.maxOf { it.first }
-            val iDataMin = data.minOf { it.second }
-            val iDataMax = data.maxOf { it.second }
-            computeNiceRange(vDataMin, vDataMax, 2.00f) to computeNiceRange(iDataMin, iDataMax, 2.00f)
+            val vDataMin = data.minOf { it.voltage }
+            val vDataMax = data.maxOf { it.voltage }
+            val iDataMin = data.minOf { it.currentUa }
+            val iDataMax = data.maxOf { it.currentUa }
+            computeNiceRange(vDataMin, vDataMax, 2.00f) to
+                computeNiceRange(iDataMin, iDataMax, 2.00f)
         }
     }
 
     val (vRange, iRange) = niceRange
-    val vMin = vRange.min; val vMax = vRange.max; val vStep = vRange.step; val vSteps = vRange.steps
-    val iMin = iRange.min; val iMax = iRange.max; val iStep = iRange.step; val iSteps = iRange.steps
+    val vSteps = vRange.steps
+    val iSteps = iRange.steps
 
     // Sizes were tuned in raw px on a ~2.75x-density screen and are re-expressed
     // in dp so text and layout scale with display density.
@@ -451,7 +702,7 @@ fun WaveformChart(
                 for (i in 0..vSteps) {
                     val y = chartTop + drawHeight * (1f - i.toFloat() / vSteps)
                     drawContext.canvas.nativeCanvas.drawLine(chartLeft, y, chartRight, y, gridPaint)
-                    val vVal = vMin + vStep * i
+                    val vVal = vRange.tickValue(i)
                     drawContext.canvas.nativeCanvas.drawText(
                         formatAxisVoltage(vVal), chartLeft - 5.dp.toPx(), y + 4.dp.toPx(), vTickPaint
                     )
@@ -468,7 +719,7 @@ fun WaveformChart(
 
                 for (i in 0..iSteps) {
                     val y = chartTop + drawHeight * (1f - i.toFloat() / iSteps)
-                    val iVal = iMin + iStep * i
+                    val iVal = iRange.tickValue(i)
                     drawContext.canvas.nativeCanvas.drawText(
                         formatAxisCurrent(iVal), chartRight + 5.dp.toPx(), y + 4.dp.toPx(), iTickPaint
                     )
@@ -501,15 +752,24 @@ fun WaveformChart(
                 val voltagePath = Path()
                 val currentPath = Path()
 
-                data.forEachIndexed { index, (v, i, t) ->
+                var previousSegment: Long? = null
+                data.forEach { (v, i, t, segmentId) ->
                     val xFraction = (t - windowStart).toFloat() / visibleTimeMs
                     val x = chartLeft + xFraction * drawWidth
-                    val yV = chartTop + drawHeight * (1f - (v - vMin) / (vMax - vMin))
-                    val yI = chartTop + drawHeight * (1f - (i - iMin) / (iMax - iMin))
+                    val yV = chartTop + drawHeight * (1f - vRange.fractionOf(v))
+                    val yI = chartTop + drawHeight * (1f - iRange.fractionOf(i))
                     val yVC = yV.coerceIn(chartTop, chartBottom)
                     val yIC = yI.coerceIn(chartTop, chartBottom)
-                    if (index == 0) { voltagePath.moveTo(x, yVC); currentPath.moveTo(x, yIC) }
-                    else { voltagePath.lineTo(x, yVC); currentPath.lineTo(x, yIC) }
+                    if (segmentId != previousSegment) {
+                        // A missing run of original packets is empty space,
+                        // not a measured ramp between two sampled values.
+                        voltagePath.moveTo(x, yVC)
+                        currentPath.moveTo(x, yIC)
+                    } else {
+                        voltagePath.lineTo(x, yVC)
+                        currentPath.lineTo(x, yIC)
+                    }
+                    previousSegment = segmentId
                 }
 
                 drawPath(voltagePath, voltageColor, style = Stroke(1.dp.toPx()))
@@ -517,31 +777,4 @@ fun WaveformChart(
             }
         }
     }
-}
-
-data class NiceAxisRange(val min: Float, val max: Float, val step: Float, val steps: Int)
-
-private fun computeNiceRange(dataMin: Float, dataMax: Float, minMarginFraction: Float): NiceAxisRange {
-    val span = (dataMax - dataMin).coerceAtLeast(0.0001f)
-    val margin = span * minMarginFraction
-    val rawMin = dataMin - margin
-    val rawMax = dataMax + margin
-    val niceSpan = rawMax - rawMin
-
-    val exponent = kotlin.math.floor(kotlin.math.log10(niceSpan.toDouble())).toInt()
-    val fraction = niceSpan / 10.0.pow(exponent.toDouble()).toFloat()
-
-    val niceFraction = when {
-        fraction <= 1.5f -> 1.0f
-        fraction <= 3.0f -> 2.0f
-        fraction <= 7.0f -> 5.0f
-        else -> 10.0f
-    }
-
-    val step = (niceFraction * 10.0.pow(exponent.toDouble())).toFloat() / 5f
-    val niceMin = (kotlin.math.floor(rawMin / step) * step).toFloat()
-    val niceMax = (kotlin.math.ceil(rawMax / step) * step).toFloat()
-    val steps = ((niceMax - niceMin) / step).toInt()
-
-    return NiceAxisRange(niceMin, niceMax, step, steps)
 }

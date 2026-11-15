@@ -57,10 +57,10 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -83,6 +83,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.BackdropEffectScope
 import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
@@ -93,6 +94,8 @@ import com.irregular.xenopowermeter.ui.BottomBarInset
 import com.irregular.xenopowermeter.ui.BottomBarHeight
 import com.irregular.xenopowermeter.ui.BottomBarLift
 import com.irregular.xenopowermeter.ui.GlassRimHighlight
+import com.irregular.xenopowermeter.ui.RecordingRimHighlight
+import com.irregular.xenopowermeter.ui.isTabletLandscape
 import com.irregular.xenopowermeter.ui.PageEndGutter
 import com.irregular.xenopowermeter.ui.RailActionCount
 import com.irregular.xenopowermeter.ui.RailActionGap
@@ -227,6 +230,13 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
     val isRecording by viewModel.recorder.isRecording.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val usbAttached by usbAttachEvents.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel) {
+        viewModel.connectionEvents.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     // Auto-connect when the system launched the app by plugging the meter in.
     // Always consume the event, even while already connected — otherwise a
@@ -270,7 +280,8 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
     // Landscape turns the pill on its side and hangs it off the start edge;
     // portrait keeps it floating along the bottom. Everything below reads this
     // one flag, so the bar, the pages' insets and the pages' own bands agree.
-    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    // Tablet-class devices only — a rotated phone keeps the bottom bar.
+    val isLandscape = isTabletLandscape()
 
     Box(Modifier.fillMaxSize()) {
         // Pages run edge-to-edge; the bar floats above them, and the
@@ -493,11 +504,14 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
         // wears the deeper teal (connectButtonColor), clear and record sit on
         // the bar tint. Reading the fills from the same palette is what keeps
         // the two orientations looking like one app rather than two.
-        fun circleGlass(tint: Color): Modifier = Modifier.drawBackdrop(
+        fun circleGlass(
+            tint: Color,
+            highlight: () -> Highlight? = GlassRimHighlight
+        ): Modifier = Modifier.drawBackdrop(
             backdrop = backdrop,
             shape = { CircleShape },
             effects = glassEffects,
-            highlight = GlassRimHighlight,
+            highlight = highlight,
             shadow = null,
             innerShadow = null,
             onDrawSurface = { drawRect(tint) }
@@ -823,11 +837,43 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                 val circleTint = AppColors.buttonTextColor()
                 val accentTint = MaterialTheme.colorScheme.primary
 
+                // Mirror the portrait record pill: the disc cross-fades its
+                // base to the same red glass (62% toward E53935), wears the
+                // warm recording rim while running and paints its icon white.
+                // The rim itself hard-swaps exactly like the pill's does.
+                val recordTransition by animateFloatAsState(
+                    targetValue = if (isRecording) 1f else 0f,
+                    animationSpec = tween(durationMillis = 500),
+                    label = "railRecordTransition"
+                )
+                val recordIconTint by animateColorAsState(
+                    targetValue = if (isRecording) Color.White else circleTint,
+                    animationSpec = tween(durationMillis = 500),
+                    label = "railRecordIconTint"
+                )
+                // The red target keeps the circle's own translucency, so the
+                // recording disc stays as see-through as its teal siblings.
+                val recordSurfaceColor = lerp(
+                    barSurfaceColor,
+                    Color(0xFFE53935).copy(alpha = barSurfaceColor.alpha),
+                    0.62f
+                )
+                val recordCircleSurface = remember(
+                    backdrop, barSurfaceColor, glassEffects, recordTransition, isRecording
+                ) {
+                    circleGlass(
+                        lerp(barSurfaceColor, recordSurfaceColor, recordTransition),
+                        highlight = if (isRecording) RecordingRimHighlight else GlassRimHighlight
+                    )
+                }
+
                 // Resolve the dialog strings here — where the hot language
                 // switch provably re-resolves — and pass them in as plain
-                // values; a Dialog captures its locals when it opens.
-                val clearTitle = stringResource(R.string.clear_confirm_title)
-                val clearMessage = stringResource(R.string.clear_confirm_message)
+                // values; a Dialog captures its locals when it opens. The
+                // rail's clear disc clears the waveform/chart, so it speaks
+                // the same wording as the portrait ClearButton's dialog.
+                val clearTitle = stringResource(R.string.clear_waveform_confirm_title)
+                val clearMessage = stringResource(R.string.clear_waveform_confirm_message)
                 val confirmLabel = stringResource(R.string.confirm_clear)
                 val cancelLabel = stringResource(R.string.cancel)
                 var showClearDialog by remember { mutableStateOf(false) }
@@ -878,15 +924,15 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
                     onClick = { showClearDialog = true }
                 )
                 RailActionButton(
-                    surface = circleSurface,
+                    surface = recordCircleSurface,
                     disabledSurface = disabledCircleSurface,
                     disabledTint = disabledContentTint,
                     icon = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
                     contentDescription = stringResource(
                         if (isRecording) R.string.stop else R.string.record
                     ),
-                    enabled = isConnected,
-                    tint = if (isRecording) accentTint else circleTint,
+                    enabled = isConnected || isRecording,
+                    tint = recordIconTint,
                     modifier = Modifier.offset(
                         y = (RailThickness + RailActionGap) * 2
                     ),
@@ -905,6 +951,18 @@ fun XenoPowerApp(usbAttachEvents: MutableStateFlow<Boolean>) {
             visible = showChangelog,
             warmWhenAboutShown = pagerState.currentPage == bottomNavItems.lastIndex,
             onClose = { showChangelog.value = false }
+        )
+
+        // Connection and recording results must remain visible on every page.
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .then(
+                    if (isLandscape) Modifier.padding(start = RailPageStart, bottom = 16.dp)
+                    else Modifier.windowInsetsPadding(BottomBarInset)
+                        .padding(bottom = BottomBarHeight + BottomBarLift + 16.dp)
+                )
         )
     }
 }

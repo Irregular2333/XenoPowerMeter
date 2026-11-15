@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F5F5F5</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <!-- Set native attributes directly on API 31+: some ROMs (e.g.
+             HyperOS) fail to resolve the compat library's ?attr indirection
+             and fall back to the square launcher icon. -->
+        <item name="android:windowSplashScreenBackground">#F5F5F5</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
+    </style>
+</resources>

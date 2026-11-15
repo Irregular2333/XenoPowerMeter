@@ -7,8 +7,6 @@
     <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#000000</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
-        <item name="android:windowSplashScreenBackground">#000000</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
         <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
     </style>
 </resources>

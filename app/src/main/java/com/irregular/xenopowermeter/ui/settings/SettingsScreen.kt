@@ -3,6 +3,7 @@ package com.irregular.xenopowermeter.ui.settings
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
@@ -22,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration 
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -33,6 +33,7 @@ import androidx.core.content.ContextCompat
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.RangeMode
+import com.irregular.xenopowermeter.notification.IslandHelper
 import com.irregular.xenopowermeter.ui.BottomBarInset
 import com.irregular.xenopowermeter.ui.BottomBarTopEdge
 import com.irregular.xenopowermeter.ui.BottomMeltOverhang
@@ -40,6 +41,7 @@ import com.irregular.xenopowermeter.ui.bottomEdgeContentFade
 import com.irregular.xenopowermeter.ui.BottomBarHeight
 import com.irregular.xenopowermeter.ui.PageEndGutter
 import com.irregular.xenopowermeter.ui.RailPageStart
+import com.irregular.xenopowermeter.ui.isTabletLandscape
 import com.irregular.xenopowermeter.ui.theme.AppColors
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -49,20 +51,34 @@ import com.irregular.xenopowermeter.ui.TopBarSkirt
 import com.irregular.xenopowermeter.ui.rememberTopEdgeProgress
 import com.irregular.xenopowermeter.ui.scrollEdgeContentFade
 import com.irregular.xenopowermeter.viewmodel.WaveformViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(viewModel: WaveformViewModel) {
     val cardTextColor = AppColors.buttonTextColor()
     val cardColor = AppColors.cardColor()
-    val settingsButtonColor = AppColors.settingsButtonColor()
+    // Settings card buttons share the home pill's colour logic: the deeper
+    // teal connect-button fill, home text colour, and the home pill's gray
+    // disabled state (onSurface 12% with content dimmed to 45%).
+    val settingsButtonColor = AppColors.connectButtonColor()
     val settingsButtonTextColor = AppColors.settingsButtonTextColor()
     val calibration by viewModel.calibration.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    // Resolve resources in composition, then keep asynchronous permission and
+    // export results in sync with hot language/configuration changes.
+    val notificationEnableFailed by rememberUpdatedState(stringResource(R.string.notification_enable_failed))
+    val exportDirectoryUnknown by rememberUpdatedState(stringResource(R.string.export_dir_unknown))
+    val exportBinSuccess by rememberUpdatedState(stringResource(R.string.export_bin_success))
+    val exportCsvSuccess by rememberUpdatedState(stringResource(R.string.export_csv_success))
+    val exportFailed by rememberUpdatedState(stringResource(R.string.export_fail))
 
     val recorder = viewModel.recorder
     val entryCount by recorder.entryCount.collectAsState()
@@ -78,7 +94,7 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
             AppSettings.updateNotificationEnabled(true)
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar(context.getString(R.string.notification_enable_failed))
+                snackbarHostState.showSnackbar(notificationEnableFailed)
             }
         }
     }
@@ -86,14 +102,12 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
     fun generateFileName(ext: String): String {
         val endCal = java.util.Calendar.getInstance().apply { timeInMillis = recorder.endMillis }
         val startCal = java.util.Calendar.getInstance().apply { timeInMillis = recorder.startMillis }
-        val date = String.format("%04d%02d%02d", endCal.get(java.util.Calendar.YEAR), endCal.get(java.util.Calendar.MONTH) + 1, endCal.get(java.util.Calendar.DAY_OF_MONTH))
-        val startTime = String.format("%02d%02d%02d", startCal.get(java.util.Calendar.HOUR_OF_DAY), startCal.get(java.util.Calendar.MINUTE), startCal.get(java.util.Calendar.SECOND))
-        val endTime = String.format("%02d%02d%02d", endCal.get(java.util.Calendar.HOUR_OF_DAY), endCal.get(java.util.Calendar.MINUTE), endCal.get(java.util.Calendar.SECOND))
+        val date = String.format(Locale.US, "%04d%02d%02d", endCal.get(java.util.Calendar.YEAR), endCal.get(java.util.Calendar.MONTH) + 1, endCal.get(java.util.Calendar.DAY_OF_MONTH))
+        val startTime = String.format(Locale.US, "%02d%02d%02d", startCal.get(java.util.Calendar.HOUR_OF_DAY), startCal.get(java.util.Calendar.MINUTE), startCal.get(java.util.Calendar.SECOND))
+        val endTime = String.format(Locale.US, "%02d%02d%02d", endCal.get(java.util.Calendar.HOUR_OF_DAY), endCal.get(java.util.Calendar.MINUTE), endCal.get(java.util.Calendar.SECOND))
         return "XenoPowerMeter_Recording_${date}_${startTime}_${endTime}.$ext"
     }
 
-    // Human-readable directory of a SAF document uri, e.g. "/Download";
-    // empty if the provider's path can't be interpreted.
     // Human-readable directory of a SAF document uri, e.g. "/Download"; empty
     // if it can't be resolved. Providers differ: externalstorage hands out
     // real paths, media/downloads only a numeric document id (resolved via
@@ -131,23 +145,25 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: throw IOException("The document provider did not open an output stream")
+                    output.use { os ->
                         recorder.exportToBin(os)
                     }
                     // Resolve the directory here (ContentResolver.query is
                     // binder IPC) — not on the main thread below.
-                    val dirText = exportDirName(context, uri)
-                        .ifEmpty { context.getString(R.string.export_dir_unknown) }
-                    scope.launch(Dispatchers.Main) {
+                    val directory = exportDirName(context, uri)
+                    withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.export_bin_success, entryCount, dirText)
+                            String.format(Locale.getDefault(), exportBinSuccess, entryCount,
+                                directory.ifEmpty { exportDirectoryUnknown })
                         )
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    scope.launch(Dispatchers.Main) {
-                        snackbarHostState.showSnackbar(
-                            context.getString(R.string.export_fail)
-                        )
+                    withContext(Dispatchers.Main) {
+                        snackbarHostState.showSnackbar(exportFailed)
                     }
                 }
             }
@@ -160,30 +176,30 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: throw IOException("The document provider did not open an output stream")
+                    output.use { os ->
                         recorder.exportToCsv(os)
                     }
-                    val dirText = exportDirName(context, uri)
-                        .ifEmpty { context.getString(R.string.export_dir_unknown) }
-                    scope.launch(Dispatchers.Main) {
+                    val directory = exportDirName(context, uri)
+                    withContext(Dispatchers.Main) {
                         snackbarHostState.showSnackbar(
-                            context.getString(R.string.export_csv_success, entryCount, dirText)
+                            String.format(Locale.getDefault(), exportCsvSuccess, entryCount,
+                                directory.ifEmpty { exportDirectoryUnknown })
                         )
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    scope.launch(Dispatchers.Main) {
-                        snackbarHostState.showSnackbar(
-                            context.getString(R.string.export_fail)
-                        )
+                    withContext(Dispatchers.Main) {
+                        snackbarHostState.showSnackbar(exportFailed)
                     }
                 }
             }
         }
     }
 
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp
-    val isLandscape = screenWidthDp > screenHeightDp
+    val isLandscape = isTabletLandscape()
     val settingsScrollState = rememberScrollState()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -257,7 +273,7 @@ private fun ScrollableSettingsPage(
     // Landscape hangs the bar off the start edge, so the space the page has to
     // clear moves from the bottom to the side, and there is nothing left to
     // dissolve at the bottom.
-    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+    val isLandscape = isTabletLandscape()
     // The three pages share one start edge (rail + gutter in landscape, the
     // phone's 16dp otherwise). Keep reading it from BottomInset instead of
     // re-deriving it here: the old "16 + rail + 8" made Settings start 16dp
@@ -479,7 +495,6 @@ private fun DisplayCard(
             ColorModeSetting(labelColor, valueColor)
             ChartScaleModeSetting(labelColor, valueColor)
             RangeSetting(labelColor, valueColor) { range -> viewModel.setRange(range) }
-            AutoConnectSetting(labelColor, valueColor)
         }
     }
 }
@@ -502,60 +517,81 @@ private fun DataRecordCard(
     generateFileName: (String) -> String
 ) {
     val cardColor = AppColors.cardColor()
+    val isRecording by recorder.isRecording.collectAsState()
+    val exportNeedPause by rememberUpdatedState(stringResource(R.string.export_need_pause))
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)) {
-            NotificationSetting(labelColor, valueColor, permissionLauncher)
-            RecordingDurationLimitSetting(labelColor, valueColor)
+        Column(modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                AutoConnectSetting(labelColor, valueColor)
+                NotificationSetting(labelColor, valueColor, permissionLauncher)
+                RecordingDurationLimitSetting(labelColor, valueColor)
 
-            Row(
-                modifier = Modifier.fillMaxWidth().height(38.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(stringResource(R.string.record_count_label), fontSize = 15.sp, color = labelColor)
-                Text(String.format(stringResource(R.string.recording_value), entryCount), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = valueColor)
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(R.string.record_count_label), fontSize = 15.sp, color = labelColor)
+                    Text(String.format(stringResource(R.string.recording_value), entryCount), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = valueColor)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(R.string.record_duration_label), fontSize = 15.sp, color = labelColor)
+                    Text(String.format(stringResource(R.string.duration_value), duration), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = valueColor)
+                }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().height(38.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(stringResource(R.string.record_duration_label), fontSize = 15.sp, color = labelColor)
-                Text(String.format(stringResource(R.string.duration_value), duration), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = valueColor)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             var showExportMenu by remember { mutableStateOf(false) }
             var showClearDialog by remember { mutableStateOf(false) }
+            var clearSessionId by remember { mutableLongStateOf(0L) }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(40.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     Button(
                         onClick = {
-                            if (recorder.isRecording.value) {
-                                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.export_need_pause)) }
+                            if (isRecording) {
+                                scope.launch { snackbarHostState.showSnackbar(exportNeedPause) }
                             } else {
                                 showExportMenu = true
                             }
                         },
                         enabled = entryCount > 0,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = settingsButtonColor,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
-                            disabledContentColor = MaterialTheme.colorScheme.onSurface
+                            contentColor = labelColor,
+                            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                            disabledContentColor = labelColor.copy(alpha = 0.45f)
                         )
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        // Home GlassPill keeps its icon neutral (ambient
+                        // LocalContentColor) while the label takes the teal —
+                        // the disabled icon reads as plain gray there. The M3
+                        // Button paints both from disabledContentColor, which
+                        // tints the icon teal at 45%, so mirror the home rule:
+                        // neutral onSurface gray when disabled, inherit when on.
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = null,
+                            tint = if (entryCount > 0) LocalContentColor.current
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.export_recorded_data))
+                        Text(
+                            text = stringResource(R.string.export_data),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                     val exportCtx = AppSettings.localizedContext(context)
                     Box(modifier = Modifier.align(Alignment.BottomEnd)) {
@@ -566,7 +602,15 @@ private fun DataRecordCard(
                             DropdownMenuItem(
                                 text = { Text(exportCtx.getString(R.string.export_option_bin)) },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    // Match the menu label's onSurface dark gray; the
+                                    // M3 default leadingIcon tint (onSurfaceVariant)
+                                    // renders visibly lighter next to the text.
+                                    Icon(
+                                        Icons.Default.Save,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 },
                                 onClick = {
                                     showExportMenu = false
@@ -576,7 +620,12 @@ private fun DataRecordCard(
                             DropdownMenuItem(
                                 text = { Text(exportCtx.getString(R.string.export_option_csv)) },
                                 leadingIcon = {
-                                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        Icons.Default.TableChart,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 },
                                 onClick = {
                                     showExportMenu = false
@@ -586,19 +635,36 @@ private fun DataRecordCard(
                         }
                     }
                 }
-                Box {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     Button(
-                        onClick = { showClearDialog = true },
-                        enabled = entryCount > 0 && !recorder.isRecording.value,
-                        modifier = Modifier.fillMaxHeight(),
+                        onClick = {
+                            clearSessionId = recorder.sessionId
+                            showClearDialog = true
+                        },
+                        enabled = entryCount > 0 && !isRecording,
+                        modifier = Modifier.fillMaxSize(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = settingsButtonColor,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
-                            disabledContentColor = MaterialTheme.colorScheme.onSurface
+                            contentColor = labelColor,
+                            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                            disabledContentColor = labelColor.copy(alpha = 0.45f)
                         )
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        // Neutral gray when disabled — see the export button.
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = if (entryCount > 0 && !isRecording) LocalContentColor.current
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.clear),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -611,7 +677,10 @@ private fun DataRecordCard(
                     confirmButton = {
                         TextButton(onClick = {
                             showClearDialog = false
-                            recorder.clearRecording()
+                            val expectedSessionId = clearSessionId
+                            scope.launch(Dispatchers.IO) {
+                                recorder.clearRecordingIfStopped(expectedSessionId)
+                            }
                         }) { Text(stringResource(R.string.confirm_clear)) }
                     },
                     dismissButton = {
@@ -635,28 +704,35 @@ private fun CalibrationCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)) {
-            CalibrationRow(stringResource(R.string.calibration_low_scale), calibration.lowScaleMultiplier)
-            CalibrationRow(stringResource(R.string.calibration_low_offset), calibration.lowOffsetUa, "\u03BCA")
-            CalibrationRow(stringResource(R.string.calibration_mid_scale), calibration.midScaleMultiplier)
-            CalibrationRow(stringResource(R.string.calibration_mid_offset), calibration.midOffsetUa, "\u03BCA")
-            CalibrationRow(stringResource(R.string.calibration_high_scale), calibration.highScaleMultiplier)
-            CalibrationRow(stringResource(R.string.calibration_high_offset), calibration.highOffsetUa, "\u03BCA")
-
-            Spacer(modifier = Modifier.height(8.dp))
+        Column(modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                CalibrationRow(stringResource(R.string.calibration_low_scale), calibration.lowScaleMultiplier)
+                CalibrationRow(stringResource(R.string.calibration_low_offset), calibration.lowOffsetUa, "\u03BCA")
+                CalibrationRow(stringResource(R.string.calibration_mid_scale), calibration.midScaleMultiplier)
+                CalibrationRow(stringResource(R.string.calibration_mid_offset), calibration.midOffsetUa, "\u03BCA")
+                CalibrationRow(stringResource(R.string.calibration_high_scale), calibration.highScaleMultiplier)
+                CalibrationRow(stringResource(R.string.calibration_high_offset), calibration.highOffsetUa, "\u03BCA")
+            }
 
             Button(
                 onClick = { viewModel.loadCalibration() },
                 enabled = isConnected,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(40.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = settingsButtonColor,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    disabledContainerColor = settingsButtonColor.copy(alpha = 0.38f),
-                    disabledContentColor = MaterialTheme.colorScheme.onSurface
+                    contentColor = AppColors.buttonTextColor(),
+                    disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    disabledContentColor = AppColors.buttonTextColor().copy(alpha = 0.45f)
                 )
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                // Neutral gray when disabled — see the export button.
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = null,
+                    tint = if (isConnected) LocalContentColor.current
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    modifier = Modifier.size(16.dp)
+                )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(stringResource(R.string.read))
             }
@@ -871,7 +947,7 @@ private fun NotificationSetting(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp),
+            .height(34.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -880,17 +956,18 @@ private fun NotificationSetting(
             modifier = Modifier.width(130.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            val thumbOffset by animateDpAsState(if (enabled) 39.dp else 3.dp, label = "thumb")
+            val thumbOffset by animateDpAsState(if (enabled) 35.dp else 3.dp, label = "thumb")
             Box(
                 modifier = Modifier
-                    .width(68.dp)
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .width(60.dp)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(if (enabled) valueColor else labelColor.copy(alpha = 0.3f))
                     .clickable {
                         if (!enabled) {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                                == PackageManager.PERMISSION_GRANTED
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                                    == PackageManager.PERMISSION_GRANTED
                             ) {
                                 AppSettings.updateNotificationEnabled(true)
                             } else {
@@ -898,17 +975,18 @@ private fun NotificationSetting(
                             }
                         } else {
                             AppSettings.updateNotificationEnabled(false)
+                            IslandHelper.cancelNotification(context)
                         }
                     },
                 contentAlignment = Alignment.CenterStart
             ) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = thumbOffset)
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(androidx.compose.ui.graphics.Color.White)
-                )
+                    Box(
+                        modifier = Modifier
+                            .padding(start = thumbOffset)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.White)
+                    )
             }
         }
     }
@@ -924,7 +1002,7 @@ private fun AutoConnectSetting(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp),
+            .height(34.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -933,23 +1011,23 @@ private fun AutoConnectSetting(
             modifier = Modifier.width(130.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            val thumbOffset by animateDpAsState(if (enabled) 39.dp else 3.dp, label = "autoConnectThumb")
+            val thumbOffset by animateDpAsState(if (enabled) 35.dp else 3.dp, label = "autoConnectThumb")
             Box(
                 modifier = Modifier
-                    .width(68.dp)
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .width(60.dp)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(if (enabled) valueColor else labelColor.copy(alpha = 0.3f))
                     .clickable { AppSettings.updateAutoConnect(!enabled) },
                 contentAlignment = Alignment.CenterStart
             ) {
-                Box(
-                    modifier = Modifier
-                        .padding(start = thumbOffset)
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(androidx.compose.ui.graphics.Color.White)
-                )
+                    Box(
+                        modifier = Modifier
+                            .padding(start = thumbOffset)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.White)
+                    )
             }
         }
     }

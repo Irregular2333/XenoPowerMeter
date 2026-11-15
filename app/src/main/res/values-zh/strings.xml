@@ -14,15 +14,19 @@
     <string name="record">开始记录</string>
     <string name="stop">停止记录</string>
     <string name="clear">清除数据</string>
+    <string name="clear_waveform">清除波形</string>
+    <string name="clear_waveform_confirm_title">清除图表数据</string>
+    <string name="clear_waveform_confirm_message">确定清除当前波形和统计数据吗？</string>
     <string name="range">量程</string>
 
     <!-- Settings Screen -->
-    <string name="data_record">数据记录</string>
+    <string name="data_record">设备</string>
     <string name="record_count_label">记录数据数量</string>
     <string name="recording_value">%d 条</string>
     <string name="record_duration_label">记录时长</string>
     <string name="duration_value">%.2fs</string>
     <string name="export_recorded_data">导出已记录的数据</string>
+    <string name="export_data">导出数据</string>
     <string name="export_option_bin">导出 .bin 文件</string>
     <string name="export_option_csv">导出 .csv 文件</string>
     <string name="export_bin_success">已导出 %1$d 条数据到 %2$s</string>
@@ -69,6 +73,8 @@
     <string name="event_connected">设备已连接</string>
     <string name="recording_start_failed">录制启动失败</string>
     <string name="recording_lost">录制已中断（写入错误）</string>
+    <string name="recording_auto_stopped">已达记录时长上限，录制已自动停止</string>
+    <string name="recording_disconnected">设备连接中断，录制已停止</string>
     <string name="event_disconnected">设备已断开</string>
     <string name="event_no_device">未找到设备</string>
     <string name="event_permission_denied">USB 权限被拒绝</string>
@@ -76,6 +82,7 @@
     <string name="event_no_port">未找到串口</string>
     <string name="event_connect_failed">连接失败：%1$s</string>
     <string name="event_read_error">读取错误，连接已中断</string>
+    <string name="event_sample_queue_overflow">采样处理积压过多，已断开连接以避免录制数据不完整</string>
 
     <!-- Export -->
     <string name="export_need_pause">请先停止记录再导出</string>
@@ -95,6 +102,18 @@
     <string name="back">返回</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_0">
+        <item>优化了应用的显示效果</item>
+        <item>优化了平板显示切换的逻辑</item>
+        <item>优化了USB初始化的逻辑</item>
+        <item>优化了记录数据时的采样逻辑</item>
+        <item>优化了设置的选项排序分组</item>
+        <item>优化了录制期间应用内的提示</item>
+        <item>修复了App的ADC标度不正确的问题</item>
+        <item>修复了连接设备时偶现无法记录数据的问题</item>
+        <item>修复了连接设备时网格图绘制错误的问题</item>
+        <item>修复了导出文件时因时间戳导致出错的问题</item>
+    </string-array>
     <string-array name="changelog_2_1_0">
         <item>修复了网格图显示错误以及单位错误的问题</item>
         <item>优化了首页的显示效果</item>

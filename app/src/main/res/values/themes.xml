@@ -7,11 +7,6 @@
     <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#F5F5F5</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
-        <!-- Set directly: some ROMs (e.g. HyperOS) fail to resolve the compat
-             library's ?attr indirection for these system attributes and fall
-             back to the launcher icon, which renders as a plain square. -->
-        <item name="android:windowSplashScreenBackground">#F5F5F5</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
         <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
     </style>
 </resources>

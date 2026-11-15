@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -140,10 +139,7 @@ internal val RailPageStart: Dp
  * ends of the rail row); portrait keeps the wider 16dp grip.
  */
 internal val PageEndGutter: Dp
-    @Composable get() {
-        val config = LocalConfiguration.current
-        return if (config.screenWidthDp > config.screenHeightDp) RailPageGutter else 16.dp
-    }
+    @Composable get() = if (isTabletLandscape()) RailPageGutter else 16.dp
 
 /**
  * Landscape-only: the action circles (connect / clear / record) hang below

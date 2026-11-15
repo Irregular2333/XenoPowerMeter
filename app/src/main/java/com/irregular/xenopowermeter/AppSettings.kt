@@ -48,17 +48,17 @@ object AppSettings {
         if (initialized) return
         initialized = true
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        language = loadEnum(KEY_LANGUAGE, KEY_LANGUAGE_LEGACY, Language.values(), Language.SYSTEM)
-        colorMode = loadEnum(KEY_COLOR_MODE, KEY_COLOR_MODE_LEGACY, ColorMode.values(), ColorMode.SYSTEM)
+        language = loadEnum(KEY_LANGUAGE, KEY_LANGUAGE_LEGACY, Language.entries, Language.SYSTEM)
+        colorMode = loadEnum(KEY_COLOR_MODE, KEY_COLOR_MODE_LEGACY, ColorMode.entries, ColorMode.SYSTEM)
         notificationEnabled = prefs?.getBoolean(KEY_NOTIFICATION_ENABLED, true) ?: true
         autoConnect = prefs?.getBoolean(KEY_AUTO_CONNECT, true) ?: true
-        range = loadEnum(KEY_RANGE, KEY_RANGE_LEGACY, RangeMode.values(), RangeMode.AUTO)
-        chartScaleMode = loadEnum(KEY_CHART_SCALE_MODE, KEY_CHART_SCALE_MODE, ChartScaleMode.values(), ChartScaleMode.AUTO)
+        range = loadEnum(KEY_RANGE, KEY_RANGE_LEGACY, RangeMode.entries, RangeMode.AUTO)
+        chartScaleMode = loadEnum(KEY_CHART_SCALE_MODE, KEY_CHART_SCALE_MODE, ChartScaleMode.entries, ChartScaleMode.AUTO)
         recordingDurationLimitMin = prefs?.getInt(KEY_RECORDING_DURATION_LIMIT, 5) ?: 5
     }
 
     /** Persist enums by name so inserting/reordering entries can't shift saved values. */
-    private fun <T : Enum<T>> loadEnum(key: String, legacyKey: String, values: Array<T>, default: T): T {
+    private fun <T : Enum<T>> loadEnum(key: String, legacyKey: String, values: List<T>, default: T): T {
         val name = prefs?.getString(key, null)
         if (name != null) {
             return values.firstOrNull { it.name == name } ?: default
@@ -70,18 +70,18 @@ object AppSettings {
     /**
      * Context override carrying the in-app language, used for hot language
      * switching: string lookups resolve immediately without recreating the
-     * activity. The system per-app locale stays in sync via applyLocale() at
-     * the next cold start.
+     * activity. SYSTEM uses the device locale directly so it is not trapped
+     * by an AppCompat locale applied earlier in this process.
      */
     fun localizedContext(base: Context): Context {
-        val locale = when (language) {
-            Language.SYSTEM -> return base
-            Language.CHINESE -> java.util.Locale.SIMPLIFIED_CHINESE
-            Language.ENGLISH -> java.util.Locale.ENGLISH
-            Language.JAPANESE -> java.util.Locale.JAPANESE
+        val locales = when (language) {
+            Language.SYSTEM -> android.content.res.Resources.getSystem().configuration.locales
+            Language.CHINESE -> android.os.LocaleList(java.util.Locale.SIMPLIFIED_CHINESE)
+            Language.ENGLISH -> android.os.LocaleList(java.util.Locale.ENGLISH)
+            Language.JAPANESE -> android.os.LocaleList(java.util.Locale.JAPANESE)
         }
         val config = android.content.res.Configuration(base.resources.configuration)
-        config.setLocales(android.os.LocaleList(locale))
+        config.setLocales(locales)
         return base.createConfigurationContext(config)
     }
 

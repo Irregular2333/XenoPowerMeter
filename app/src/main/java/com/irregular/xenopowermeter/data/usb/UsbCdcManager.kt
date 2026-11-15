@@ -6,9 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.irregular.xenopowermeter.R
@@ -17,6 +19,7 @@ import com.irregular.xenopowermeter.data.model.CmdResponse
 import com.irregular.xenopowermeter.data.model.CmdType
 import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.data.model.RangeStatus
+import com.irregular.xenopowermeter.data.model.UsbAdcPacket
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,8 +57,8 @@ class UsbCdcManager(private val context: Context) {
      * which routes ADC packets to onAdcPacket and completes pending command
      * requests (matched by echoed sequence number).
      */
-    private val demuxer = FrameDemuxer(
-        onAdcPacket = { packet -> onAdcPacket?.invoke(packet) },
+    private fun createDemuxer(packetConsumer: (UsbAdcPacket) -> Unit) = FrameDemuxer(
+        onAdcPacket = packetConsumer,
         onResponse = { type, sequence, response ->
             val pending = pendingResponses.remove(sequence)
             if (pending != null && pending.type == type) {
@@ -123,24 +126,24 @@ class UsbCdcManager(private val context: Context) {
 
     fun requestPermission(device: UsbDevice) {
         try {
+            // A previously granted permission must still register detach
+            // events so a recording is closed promptly when the cable is removed.
+            if (!receiverRegistered) {
+                val filter = IntentFilter(ACTION_USB_PERMISSION).apply {
+                    addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+                }
+                ContextCompat.registerReceiver(
+                    context, usbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                receiverRegistered = true
+            }
+
             if (usbManager.hasPermission(device)) {
                 Log.i(TAG, "USB permission already granted, connecting...")
                 connectJob = scope.launch {
                     connectToDevice(device)
                 }
                 return
-            }
-
-            if (!receiverRegistered) {
-                val filter = IntentFilter(ACTION_USB_PERMISSION).apply {
-                    addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-                } else {
-                    context.registerReceiver(usbReceiver, filter)
-                }
-                receiverRegistered = true
             }
 
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
@@ -164,6 +167,10 @@ class UsbCdcManager(private val context: Context) {
         if (isConnected) return
         if (!connectInFlight.compareAndSet(false, true)) return
         try {
+            var connection: UsbDeviceConnection? = null
+            var port: UsbSerialPort? = null
+            var portOpenAttempted = false
+            var connectionEstablished = false
             try {
                 val driver = CdcAcmSerialDriver(device)
                 if (driver.ports.isEmpty()) {
@@ -174,7 +181,7 @@ class UsbCdcManager(private val context: Context) {
 
                 // Right after the grant dialog, openDevice can transiently
                 // return null; retry before reporting a failure.
-                var connection = usbManager.openDevice(device)
+                connection = usbManager.openDevice(device)
                 var attempt = 1
                 while (connection == null && attempt < OPEN_DEVICE_ATTEMPTS) {
                     delay(OPEN_DEVICE_RETRY_MS)
@@ -187,23 +194,44 @@ class UsbCdcManager(private val context: Context) {
                     return
                 }
 
-                val port = driver.ports[0]
-                port.open(connection)
-                port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = true
-                port.rts = true
+                val openedConnection = requireNotNull(connection)
+                val openedPort = driver.ports[0]
+                port = openedPort
+                portOpenAttempted = true
+                openedPort.open(openedConnection)
+                openedPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                openedPort.dtr = true
+                openedPort.rts = true
+
+                currentCoroutineContext().ensureActive()
 
                 disconnectHandled.set(false)
-                serialPort = port
+                serialPort = openedPort
                 isConnected = true
-                startReading()
+                connectionEstablished = true
                 onConnected?.invoke()
+                startReading()
                 Log.i(TAG, "USB connected")
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e(TAG, "connectToDevice failed", e)
                 isConnected = false
                 onError?.invoke(context.getString(R.string.event_connect_failed, e.message ?: ""))
+            } finally {
+                if (!connectionEstablished) {
+                    if (portOpenAttempted) {
+                        try {
+                            port?.close()
+                        } catch (closeError: Exception) {
+                            Log.w(TAG, "Failed to close partially initialized USB port", closeError)
+                        }
+                    }
+                    try {
+                        connection?.close()
+                    } catch (closeError: Exception) {
+                        Log.w(TAG, "Failed to close USB connection after setup failure", closeError)
+                    }
+                }
             }
         } finally {
             connectInFlight.set(false)
@@ -211,13 +239,21 @@ class UsbCdcManager(private val context: Context) {
     }
 
     private fun startReading() {
+        val connectedPort = serialPort ?: return
+        val packetConsumer = onAdcPacket
         readJob = scope.launch {
+            // A new byte stream must not inherit a partial frame from the
+            // previous connection. Establish onConnected before reading so
+            // every parsed packet is tagged with the new display session.
+            val demuxer = createDemuxer { packet -> packetConsumer?.invoke(packet) }
             val buffer = ByteArray(256)
             var failures = 0
             while (isActive && isConnected) {
                 try {
-                    val port = serialPort ?: break
-                    val len = port.read(buffer, 100)
+                    val len = connectedPort.read(buffer, 100)
+                    // A cancelled blocking read can finish after a reconnect;
+                    // it must never feed the new connection's display session.
+                    if (!isActive || serialPort !== connectedPort) break
                     failures = 0
                     if (len > 0) {
                         demuxer.feed(buffer.copyOf(len))

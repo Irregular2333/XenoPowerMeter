@@ -44,25 +44,26 @@ class FrameDemuxer(
                     val type = CmdType.fromCode(typeCode and 0x7F)
 
                     if (version != PROTOCOL_VERSION || (typeCode and 0x80) == 0 ||
-                        type == null || payloadLen > MAX_RESPONSE_PAYLOAD
+                        type == null || payloadLen !in 1..MAX_RESPONSE_PAYLOAD
                     ) {
                         pos++
                         continue@scan
                     }
 
-                    val frameLen = CMD_HEADER_SIZE + payloadLen
+                    val frameLen = CMD_HEADER_SIZE + payloadLen + CMD_CRC_SIZE
                     if (length - pos < frameLen) break@scan
 
-                    val expectedCrc = readU16(pos + CMD_HEADER_SIZE + payloadLen)
-                    val actualCrc = Crc16.ccittFalse(buffer, pos + 2, 6 + payloadLen)
+                    val expectedCrc = readU16(pos + frameLen - CMD_CRC_SIZE)
+                    val actualCrc = Crc16.ccittFalse(buffer, pos + 2, CMD_HEADER_SIZE - 2 + payloadLen)
                     if (expectedCrc != actualCrc) {
                         pos++
                         continue@scan
                     }
 
-                    val status = buffer[pos + 8].toInt() and 0xFF
+                    val payloadStart = pos + CMD_HEADER_SIZE
+                    val status = buffer[payloadStart].toInt() and 0xFF
                     val payload = if (payloadLen > 1) {
-                        buffer.copyOfRange(pos + 9, pos + 8 + payloadLen)
+                        buffer.copyOfRange(payloadStart + 1, payloadStart + payloadLen)
                     } else {
                         ByteArray(0)
                     }
@@ -109,12 +110,12 @@ class FrameDemuxer(
     companion object {
         private const val CMD_HEADER_0: Byte = 0xA5.toByte()
         private const val CMD_HEADER_1: Byte = 0x5A.toByte()
-        // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen + 1 status (CRC excluded)
-        // Firmware responses include a status byte in the header; outgoing
-        // commands from buildFrame() use a 8-byte header without status.
-        private const val CMD_HEADER_SIZE = 10
-        // 1 status + CMD_PROTOCOL_MAX_PAYLOAD, mirroring user_CmdStrategy.c
-        private const val MAX_RESPONSE_PAYLOAD = 49
+        // 2 magic + 1 version + 1 type + 2 sequence + 2 payloadLen.
+        // Responses share the request header; status is the first payload byte.
+        private const val CMD_HEADER_SIZE = 8
+        private const val CMD_CRC_SIZE = 2
+        // Includes status, matching CMD_PROTOCOL_MAX_PAYLOAD in user_CmdStrategy.c.
+        private const val MAX_RESPONSE_PAYLOAD = 48
         // 2 header + 8 timestamp + 1 dataCount
         private const val ADC_HEADER_SIZE = 11
         private const val PROTOCOL_VERSION = 1

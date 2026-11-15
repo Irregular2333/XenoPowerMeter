@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.XenoPowerMeter.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#000000</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <!-- Keep the native API 31+ attributes aligned with the night theme. -->
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_rounded</item>
+        <item name="postSplashScreenTheme">@style/Theme.XenoPowerMeter</item>
+    </style>
+</resources>

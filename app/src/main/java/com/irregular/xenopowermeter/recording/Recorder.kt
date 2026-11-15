@@ -1,14 +1,18 @@
 package com.irregular.xenopowermeter.recording
 
 import android.util.Log
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.BufferedOutputStream
-import java.io.DataOutputStream
+import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -22,17 +26,50 @@ import java.nio.ByteOrder
  * 16-byte little-endian entries (f64 timestamp seconds, f32 voltage V,
  * f32 current uA) — same entry layout as the pre-1.6 exportToBin output.
  */
-class Recorder {
+class Recorder internal constructor(
+    // The recorder owns buffering so failed writes can be rolled back to the
+    // last acknowledged complete batch. This factory must return an unbuffered stream.
+    private val outputFactory: (File) -> OutputStream = { FileOutputStream(it) },
+    private val durationLimitMinutes: () -> Int = {
+        com.irregular.xenopowermeter.AppSettings.recordingDurationLimitMin
+    },
+    private val logError: (String, Exception) -> Unit = { message, error ->
+        Log.e(TAG, message, error)
+    }
+) : AutoCloseable {
+    enum class FailureStage { START, WRITE, FINALIZE, SAMPLE_OVERFLOW }
 
-    private var stream: DataOutputStream? = null
+    sealed interface RecordingEvent {
+        data class Failed(val stage: FailureStage) : RecordingEvent
+        data object Completed : RecordingEvent
+    }
+
+    @Volatile
+    var failureStage: FailureStage? = null
+        private set
+
+    private var stream: OutputStream? = null
+    private var closed = false
     private var file: File? = null
-    private var firstDeviceTimestampUs = -1L
+    private var deviceTimestampOriginUs = -1L
+    private var lastDeviceTimestampUs = -1L
     private var fallbackStartNs = 0L
+    private var fallbackBaseElapsed = 0.0
+    private var usingFallbackClock = false
     private var totalEntries = 0
     private var lastElapsed = 0.0
+    private var persistedEntries = 0
+    private var persistedElapsed = 0.0
 
+    /** Identifies the recording targeted by an asynchronous UI operation. */
+    @Volatile
+    var sessionId: Long = 0L
+        private set
+
+    @Volatile
     var startMillis: Long = 0L
         private set
+    @Volatile
     var endMillis: Long = 0L
         private set
 
@@ -45,119 +82,174 @@ class Recorder {
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+    // One-shot events retain the failure stage even if a new session starts
+    // before the UI handles it. StateFlows alone can conflate quick retries.
+    private val eventChannel = Channel<RecordingEvent>(Channel.BUFFERED)
+    val events: Flow<RecordingEvent> = eventChannel.receiveAsFlow()
+
+    // Set once when the configured duration limit is reached and the session
+    // ends by design — kept separate from [failed] so the ViewModel can show
+    // "completed" instead of alarming the user with a data-loss message.
+    private val _completed = MutableStateFlow(false)
+    val completed: StateFlow<Boolean> = _completed.asStateFlow()
+
     private val _entryCount = MutableStateFlow(0)
     val entryCount: StateFlow<Int> = _entryCount.asStateFlow()
 
     private val _duration = MutableStateFlow(0.0)
     val duration: StateFlow<Double> = _duration.asStateFlow()
 
+    // All lifecycle operations and writes share this object's monitor. The
+    // reusable batch avoids per-sample I/O/allocation and, unlike an opaque
+    // BufferedOutputStream, never retries an uncertain partially written batch.
+    private val writeBuffer = ByteBuffer.allocate(WRITE_BUFFER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+
     @Synchronized
     fun start(recordingsDir: File) {
+        if (closed || _isRecording.value) return
+        sessionId++
+        failureStage = null
         _failed.value = false
-        closeStream()
+        _completed.value = false
         totalEntries = 0
         lastElapsed = 0.0
-        firstDeviceTimestampUs = -1L
+        persistedEntries = 0
+        persistedElapsed = 0.0
+        writeBuffer.clear()
+        file = null
+        deviceTimestampOriginUs = -1L
+        lastDeviceTimestampUs = -1L
         fallbackStartNs = 0L
+        fallbackBaseElapsed = 0.0
+        usingFallbackClock = false
         startMillis = System.currentTimeMillis()
         endMillis = 0L
         _entryCount.value = 0
         _duration.value = 0.0
         try {
-            recordingsDir.mkdirs()
-            val outFile = File(recordingsDir, "recording_$startMillis.bin")
-            val dos = DataOutputStream(BufferedOutputStream(FileOutputStream(outFile), WRITE_BUFFER_BYTES))
+            if (!recordingsDir.isDirectory && !recordingsDir.mkdirs()) {
+                throw IOException("Cannot create recordings directory")
+            }
+            // A stopped session can be restarted within the same millisecond.
+            val outFile = File.createTempFile("recording_${startMillis}_", ".bin", recordingsDir)
+            file = outFile
+            val output = outputFactory(outFile)
+            stream = output
             val header = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
             header.put(MAGIC)
             header.putShort(FORMAT_VERSION.toShort())
             header.putInt(SAMPLE_RATE_HZ)
             header.putLong(startMillis)
-            dos.write(header.array())
-            stream = dos
-            file = outFile
+            output.write(header.array())
             _isRecording.value = true
             // Only the newest session stays on disk; the old temp file was
             // in-memory data before, so nothing exportable is lost here.
             recordingsDir.listFiles { f -> f.name.startsWith("recording_") && f != outFile }
                 ?.forEach { it.delete() }
         } catch (e: Exception) {
-            Log.e(TAG, "recording start failed", e)
-            closeStream()
-            file = null
-            _isRecording.value = false
-            _failed.value = true
+            finish(initialFailure = e, stage = FailureStage.START)
         }
     }
 
     @Synchronized
     fun stop() {
-        endMillis = System.currentTimeMillis()
-        closeStream()
-        _entryCount.value = totalEntries
-        _duration.value = lastElapsed
-        _isRecording.value = false
+        if (!_isRecording.value) return
+        finish()
+    }
+
+    /** Permanent lifecycle teardown; queued start calls cannot reopen this recorder. */
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        if (_isRecording.value) finish()
+        eventChannel.close()
     }
 
     /**
-     * Called once per sample (10 kHz) from the collector coroutine — the only
-     * writer. Timestamps come from the firmware's µs uptime counter so USB
+     * Called once per sample (10 kHz) from the collector coroutine. The same
+     * lock as start/stop prevents a writer from retaining a closed stream.
+     * Timestamps come from the firmware's µs uptime counter so USB
      * packet gaps don't stretch the recorded timeline.
      *
-     * Automatically stops recording when the 30-minute duration limit is reached.
+     * Automatically stops recording at the configured duration limit.
      */
+    @Synchronized
     fun addSample(voltage: Float, current: Float, deviceTimestampUs: Long) {
-        val dos = stream ?: return
-        val elapsed: Double = if (deviceTimestampUs > 0) {
-            if (firstDeviceTimestampUs < 0) firstDeviceTimestampUs = deviceTimestampUs
-            (deviceTimestampUs - firstDeviceTimestampUs) / 1_000_000.0
-        } else {
-            if (fallbackStartNs == 0L) fallbackStartNs = System.nanoTime()
-            (System.nanoTime() - fallbackStartNs) / 1_000_000_000.0
-        }
+        if (!_isRecording.value) return
+        val elapsed = elapsedTime(deviceTimestampUs)
 
         // Enforce recording duration limit from settings
-        val limitMs = com.irregular.xenopowermeter.AppSettings.recordingDurationLimitMin * 60L * 1000
+        val limitMs = durationLimitMinutes() * 60L * 1000
         if (elapsed * 1000.0 > limitMs) {
-            Log.i(TAG, "recording duration limit reached (${limitMs / 1000}s)")
-            stop()
-            _failed.value = true
+            finish(autoCompleted = true)
             return
         }
 
-        // Local buffer avoids shared mutable state across threads.
-        val entryBuffer = ByteBuffer.allocate(ENTRY_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         try {
-            entryBuffer.putDouble(elapsed)
-            entryBuffer.putFloat(voltage)
-            entryBuffer.putFloat(current)
-            dos.write(entryBuffer.array())
+            writeBuffer.putDouble(elapsed)
+            writeBuffer.putFloat(voltage)
+            writeBuffer.putFloat(current)
+            totalEntries++
+            lastElapsed = elapsed
+            if (!writeBuffer.hasRemaining()) flushEntries()
         } catch (e: Exception) {
-            Log.e(TAG, "recording write failed, stopping session", e)
-            closeStream()
-            _isRecording.value = false
-            _entryCount.value = totalEntries
-            _duration.value = lastElapsed
-            _failed.value = true
+            finish(initialFailure = e, stage = FailureStage.WRITE)
             return
         }
 
-        totalEntries++
-        lastElapsed = elapsed
         if (totalEntries % 1000 == 0) {
             _entryCount.value = totalEntries
             _duration.value = elapsed
         }
     }
 
+    /** Ends a session explicitly when bounded sample delivery loses integrity. */
+    @Synchronized
+    fun failDueToSampleOverflow() {
+        if (!_isRecording.value) return
+        finish(
+            initialFailure = IOException("Sample queue overflow; recording is incomplete"),
+            stage = FailureStage.SAMPLE_OVERFLOW,
+            flushAcceptedEntries = true
+        )
+    }
+
+    private fun elapsedTime(deviceTimestampUs: Long): Double {
+        if (!usingFallbackClock && deviceTimestampUs > 0L) {
+            if (deviceTimestampOriginUs < 0L) {
+                deviceTimestampOriginUs = deviceTimestampUs
+            } else if (deviceTimestampUs < lastDeviceTimestampUs) {
+                startFallbackClock()
+            }
+            if (!usingFallbackClock) {
+                lastDeviceTimestampUs = deviceTimestampUs
+                return fallbackBaseElapsed +
+                    (deviceTimestampUs - deviceTimestampOriginUs) / 1_000_000.0
+            }
+        } else if (!usingFallbackClock) {
+            startFallbackClock()
+        }
+        return fallbackBaseElapsed + (System.nanoTime() - fallbackStartNs) / 1_000_000_000.0
+    }
+
+    private fun startFallbackClock() {
+        usingFallbackClock = true
+        fallbackBaseElapsed = lastElapsed
+        fallbackStartNs = System.nanoTime()
+    }
+
     /** Copies the temp file (header included) verbatim. */
     fun exportToBin(outputStream: OutputStream) {
-        val f = file ?: return
-        f.inputStream().use { input ->
+        val snapshot = openExport()
+        snapshot.input.use { input ->
             val buf = ByteArray(COPY_BUFFER_BYTES)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
+            var remaining = HEADER_BYTES + snapshot.entryCount.toLong() * ENTRY_BYTES
+            while (remaining > 0) {
+                val n = input.read(buf, 0, minOf(remaining, buf.size.toLong()).toInt())
+                if (n < 0) throw IOException("Recording was truncated during export")
                 outputStream.write(buf, 0, n)
+                remaining -= n
             }
             outputStream.flush()
         }
@@ -165,11 +257,10 @@ class Recorder {
 
     /** Streams the temp file through a CSV transcode without loading it whole. */
     fun exportToCsv(outputStream: OutputStream) {
-        val f = file ?: return
-        val writer = outputStream.bufferedWriter()
-        writer.write("timestamp_s,voltage_V,current_uA\n")
-
-        f.inputStream().use { input ->
+        val snapshot = openExport()
+        snapshot.input.use { input ->
+            val writer = outputStream.bufferedWriter()
+            writer.write("timestamp_s,voltage_V,current_uA\n")
             var skipped = 0
             while (skipped < HEADER_BYTES) {
                 val n = input.skip((HEADER_BYTES - skipped).toLong())
@@ -178,7 +269,7 @@ class Recorder {
             }
 
             val entry = ByteArray(ENTRY_BYTES)
-            while (true) {
+            repeat(snapshot.entryCount) {
                 var off = 0
                 var eof = false
                 while (off < ENTRY_BYTES) {
@@ -189,8 +280,7 @@ class Recorder {
                     }
                     off += n
                 }
-                if (eof) break
-                if (off < ENTRY_BYTES) break
+                if (eof || off < ENTRY_BYTES) throw IOException("Recording contains a truncated entry")
 
                 val bb = ByteBuffer.wrap(entry).order(ByteOrder.LITTLE_ENDIAN)
                 writer.write(
@@ -200,35 +290,141 @@ class Recorder {
                     )
                 )
             }
+            writer.flush()
         }
-        writer.flush()
+    }
+
+    /** Reject a delayed clear if a newer recording has started in the meantime. */
+    @Synchronized
+    fun clearRecordingIfStopped(expectedSessionId: Long): Boolean {
+        if (_isRecording.value || sessionId != expectedSessionId) return false
+        clearRecording()
+        return true
     }
 
     /** Deletes the temp recording file and resets all counters. */
     @Synchronized
     fun clearRecording() {
-        closeStream()
+        if (_isRecording.value) finish()
         file?.delete()
         file = null
         totalEntries = 0
         lastElapsed = 0.0
-        firstDeviceTimestampUs = -1L
+        persistedEntries = 0
+        persistedElapsed = 0.0
+        writeBuffer.clear()
+        deviceTimestampOriginUs = -1L
+        lastDeviceTimestampUs = -1L
         fallbackStartNs = 0L
+        fallbackBaseElapsed = 0.0
+        usingFallbackClock = false
         startMillis = 0L
         endMillis = 0L
         _entryCount.value = 0
         _duration.value = 0.0
+        _isRecording.value = false
+        failureStage = null
         _failed.value = false
+        _completed.value = false
     }
 
-    private fun closeStream() {
-        try {
-            stream?.flush()
-        } catch (_: Exception) {}
-        try {
-            stream?.close()
-        } catch (_: Exception) {}
+    private fun flushEntries() {
+        val bytes = writeBuffer.position()
+        if (bytes == 0) return
+        checkNotNull(stream).write(writeBuffer.array(), 0, bytes)
+        persistedEntries += bytes / ENTRY_BYTES
+        persistedElapsed = lastElapsed
+        writeBuffer.clear()
+    }
+
+    /** Must be called with the recorder monitor held. */
+    private fun finish(
+        autoCompleted: Boolean = false,
+        initialFailure: Exception? = null,
+        stage: FailureStage = FailureStage.FINALIZE,
+        flushAcceptedEntries: Boolean = false
+    ) {
+        var failure = initialFailure
+        val output = stream
+        if (failure == null || flushAcceptedEntries) {
+            try {
+                flushEntries()
+                output?.flush()
+            } catch (e: Exception) {
+                if (failure == null) failure = e else failure.addSuppressed(e)
+            }
+        }
+        // Detach before closing. A failed batch is never submitted a second time.
         stream = null
+        try {
+            output?.close()
+        } catch (e: Exception) {
+            if (failure == null) failure = e else failure.addSuppressed(e)
+        }
+
+        if (failure != null) {
+            restorePersistedPrefix(failure)
+            logError("recording failed; retained complete records only", failure)
+        }
+        writeBuffer.clear()
+        endMillis = System.currentTimeMillis()
+        _entryCount.value = totalEntries
+        _duration.value = lastElapsed
+        failureStage = if (failure != null) stage else null
+        _failed.value = failure != null
+        _completed.value = autoCompleted && failure == null
+        _isRecording.value = false
+        if (failure != null) {
+            eventChannel.trySend(RecordingEvent.Failed(stage))
+        } else if (autoCompleted) {
+            eventChannel.trySend(RecordingEvent.Completed)
+        }
+    }
+
+    private fun restorePersistedPrefix(failure: Exception) {
+        totalEntries = persistedEntries
+        lastElapsed = persistedElapsed
+        val f = file ?: return
+        try {
+            // Discard an uncertain tail from a write that transferred some
+            // bytes and then threw. Only acknowledged batches are exportable.
+            if (f.length() < HEADER_BYTES) {
+                f.delete()
+                file = null
+                totalEntries = 0
+                lastElapsed = 0.0
+            } else {
+                RandomAccessFile(f, "rw").use {
+                    totalEntries = minOf(persistedEntries.toLong(), (it.length() - HEADER_BYTES) / ENTRY_BYTES).toInt()
+                    it.setLength(HEADER_BYTES + totalEntries.toLong() * ENTRY_BYTES)
+                    if (totalEntries == 0) {
+                        lastElapsed = 0.0
+                    } else if (totalEntries != persistedEntries) {
+                        val timestamp = ByteArray(java.lang.Double.BYTES)
+                        it.seek(HEADER_BYTES + (totalEntries - 1L) * ENTRY_BYTES)
+                        it.readFully(timestamp)
+                        lastElapsed = ByteBuffer.wrap(timestamp).order(ByteOrder.LITTLE_ENDIAN).double
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            failure.addSuppressed(e)
+        }
+    }
+
+    private data class ExportSnapshot(val input: InputStream, val entryCount: Int)
+
+    // Open the old session while protected, then let its independent handle
+    // outlive clear/start/close without holding up lifecycle operations during
+    // a potentially long CSV conversion or slow document-provider write.
+    @Synchronized
+    private fun openExport(): ExportSnapshot {
+        check(!_isRecording.value) { "Stop the recording before exporting" }
+        val f = file?.takeIf { it.isFile } ?: throw IOException("No recording is available")
+        if (f.length() < HEADER_BYTES + totalEntries.toLong() * ENTRY_BYTES) {
+            throw IOException("Recording contains a truncated entry")
+        }
+        return ExportSnapshot(f.inputStream(), totalEntries)
     }
 
     companion object {

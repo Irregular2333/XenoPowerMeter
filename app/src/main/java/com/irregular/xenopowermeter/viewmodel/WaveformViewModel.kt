@@ -1,7 +1,6 @@
 package com.irregular.xenopowermeter.viewmodel
 
 import android.app.Application
-import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,10 +21,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
+import java.util.concurrent.atomic.AtomicLong
 
 class WaveformViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -45,6 +44,15 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
 
     private var autoConnectJob: Job? = null
 
+    private val recordingControlMutex = Mutex()
+    private var recordingActionJob: Job? = null
+    private val connectionEpoch = AtomicLong()
+    // Accessed under recordingControlMutex. A delayed disconnect may only
+    // stop the recording belonging to that connection, never a reconnect.
+    private var recordingConnectionEpoch = -1L
+    @Volatile
+    private var cleared = false
+
     /** True while a plug-in-triggered connect is in flight; its setup errors stay silent. */
     @Volatile
     private var autoConnectPending = false
@@ -58,15 +66,19 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     private val _calibration = MutableStateFlow(Calibration.DEFAULT)
     val calibration: StateFlow<Calibration> = _calibration.asStateFlow()
 
-    private val _waveformData = MutableStateFlow<List<Triple<Float, Float, Long>>>(emptyList())
-    val waveformData: StateFlow<List<Triple<Float, Float, Long>>> = _waveformData.asStateFlow()
+    private val _waveformData = MutableStateFlow<List<WaveformPoint>>(emptyList())
+    val waveformData: StateFlow<List<WaveformPoint>> = _waveformData.asStateFlow()
 
     private val waveBuffer = WaveformRingBuffer(WAVEFORM_BUFFER_SIZE)
     // Guards waveBuffer and the average-power accumulators: the collector
     // thread writes them, clearWaveform() (main thread) may clear them.
     private val bufferLock = Any()
     // Reusable scratch for the visible-window extraction (single collector thread).
-    private val windowScratch = ArrayList<Triple<Float, Float, Long>>(81920)
+    private val windowScratch = ArrayList<WaveformPoint>(81920)
+    private val waveformTimeline = WaveformTimeline()
+    private val waveformStartupGate = WaveformStartupGate()
+    // Reject an in-flight window extraction when clear/reconnect resets it.
+    private var waveformRevision = 0L
     private var lastUpdateTimeMs = 0L
     private val updateIntervalMs = 250L
     private var lastValuePanelUpdateTimeMs = 0L
@@ -75,17 +87,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     private val _averagePower = MutableStateFlow(0f)
     val averagePower: StateFlow<Float> = _averagePower.asStateFlow()
 
-    private var validPowerSum = 0.0
-    private var validPowerCount = 0L
-
-    // Waveform x-axis baseline: session-elapsed ms derived from the firmware's
-    // µs uptime counter, so USB batching jitter doesn't stretch the timeline.
-    // Falls back to wall clock for firmware that sends no timestamps.
-    @Volatile
-    private var deviceEpochUs = -1L
-    @Volatile
-    private var lastDeviceTimestampUs = -1L
-    private var fallbackStartMs = 0L
+    private val powerStatistics = PowerStatistics()
 
     private val _visibleTimeMs = MutableStateFlow(5000L)
     val visibleTimeMs: StateFlow<Long> = _visibleTimeMs.asStateFlow()
@@ -114,92 +116,56 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun lttbDownsample(
-        data: List<Triple<Float, Float, Long>>,
-        targetPoints: Int
-    ): List<Triple<Float, Float, Long>> {
-        // Copy: data may be the shared windowScratch, which is cleared and
-        // refilled by the next collector cycle — the published chart data
-        // must not alias it.
-        if (data.size <= targetPoints || targetPoints < 3) return data.toList()
-
-        // Normalize both channels so voltage spikes survive downsampling too.
-        var vMin = Float.MAX_VALUE; var vMax = -Float.MAX_VALUE
-        var iMin = Float.MAX_VALUE; var iMax = -Float.MAX_VALUE
-        for (p in data) {
-            if (p.first < vMin) vMin = p.first
-            if (p.first > vMax) vMax = p.first
-            if (p.second < iMin) iMin = p.second
-            if (p.second > iMax) iMax = p.second
-        }
-        val vSpan = max(1e-6f, vMax - vMin)
-        val iSpan = max(1e-6f, iMax - iMin)
-
-        val result = mutableListOf<Triple<Float, Float, Long>>()
-        result.add(data[0])
-
-        val bucketSize = (data.size - 2).toDouble() / (targetPoints - 2)
-
-        var a = 0
-        for (i in 1 until targetPoints - 1) {
-            val rangeStart = (i * bucketSize).toInt() + 1
-            val rangeEnd = min(((i + 1) * bucketSize).toInt() + 1, data.size)
-            val nextRangeStart = ((i + 1) * bucketSize).toInt() + 1
-            val nextRangeEnd = min(((i + 2) * bucketSize).toInt() + 1, data.size)
-
-            var avgX = 0.0; var avgV = 0.0; var avgI = 0.0
-            val count = nextRangeEnd - nextRangeStart
-            if (count <= 0) {
-                // Last bucket collapsed: anchor against the final sample instead.
-                val last = data.last()
-                avgX = last.third.toDouble(); avgV = last.first.toDouble(); avgI = last.second.toDouble()
-            } else {
-                for (j in nextRangeStart until nextRangeEnd) {
-                    avgX += data[j].third; avgV += data[j].first; avgI += data[j].second
-                }
-                avgX /= count; avgV /= count; avgI /= count
-            }
-
-            var maxArea = -1.0; var maxIdx = rangeStart
-            for (j in rangeStart until rangeEnd) {
-                val p = data[j]
-                val areaV = abs((data[a].third - avgX) * (p.first - data[a].first) -
-                        (p.third - data[a].third) * (avgV - data[a].first)) / vSpan
-                val areaI = abs((data[a].third - avgX) * (p.second - data[a].second) -
-                        (p.third - data[a].third) * (avgI - data[a].second)) / iSpan
-                val area = areaV + areaI
-                if (area > maxArea) { maxArea = area; maxIdx = j }
-            }
-
-            result.add(data[maxIdx])
-            a = maxIdx
-        }
-
-        if (data.size > 1) {
-            result.add(data.last())
-        }
-        return result
-    }
-
     init {
         clearWaveform()
 
-        usbManager.onAdcPacket = { packet ->
-            parser.feedPacket(packet)
+        parser.onSampleQueueOverflow = {
+            viewModelScope.launch(Dispatchers.IO) {
+                recordingControlMutex.withLock {
+                    val wasRecording = recorder.isRecording.value
+                    recorder.failDueToSampleOverflow()
+                    usbManager.disconnect()
+                    if (!wasRecording) {
+                        _connectionEvents.send(appString(R.string.event_sample_queue_overflow))
+                    }
+                }
+            }
         }
 
         usbManager.onConnected = {
             autoConnectPending = false
-            viewModelScope.launch(Dispatchers.Main) {
+            parser.resetConnectionQueue()
+            val connectedEpoch = synchronized(bufferLock) {
+                val epoch = connectionEpoch.incrementAndGet()
+                resetWaveformLocked()
+                waveformStartupGate.reset()
                 _isConnected.value = true
+                epoch
+            }
+            // The reader captures this callback, including its fixed epoch.
+            // Even a late callback from an old read stays tagged as old data.
+            usbManager.onAdcPacket = { packet ->
+                parser.feedPacket(packet, connectedEpoch)
+            }
+            viewModelScope.launch(Dispatchers.Main) {
                 _connectionEvents.send(appString(R.string.event_connected))
             }
             loadCalibration()
         }
 
         usbManager.onDisconnected = {
-            viewModelScope.launch(Dispatchers.Main) {
-                _isConnected.value = false
+            _isConnected.value = false
+            val disconnectedEpoch = connectionEpoch.getAndIncrement()
+            viewModelScope.launch(Dispatchers.IO) {
+                recordingControlMutex.withLock {
+                    if (recordingConnectionEpoch != disconnectedEpoch) return@withLock
+                    val wasRecording = recorder.isRecording.value
+                    recorder.stop()
+                    cancelRecordingNotification()
+                    if (wasRecording && !recorder.failed.value) {
+                        _connectionEvents.send(appString(R.string.recording_disconnected))
+                    }
+                }
             }
         }
 
@@ -224,41 +190,47 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                 val now = System.currentTimeMillis()
                 val mainVisible = mainScreenVisible
 
-                var batchPowerSum = 0.0
-                var batchPowerCount = 0L
+                val packetConnection = samples.first().connectionId
+                val previewReady = synchronized(bufferLock) {
+                    // A queued batch from the old USB stream cannot become
+                    // the first point of the new connection's timeline.
+                    if (packetConnection != connectionEpoch.get()) return@collect
+                    if (!waveformStartupGate.acceptPacket(samples.first().receivedAtUs)) {
+                        false
+                    } else {
+                        val position = waveformTimeline.acceptPacket(
+                            samples.first().timestamp, samples.first().receivedAtUs
+                        )
+                        if (position.resetHistory) {
+                            waveBuffer.clear()
+                            _waveformData.value = emptyList()
+                            waveformRevision++
+                            lastUpdateTimeMs = 0L
+                            lastValuePanelUpdateTimeMs = 0L
+                        }
+                        for (s in samples) {
+                            waveBuffer.addLast(s.voltage, s.current, position.timeMs, position.segmentId)
+                            powerStatistics.add(s.voltage, s.current)
+                        }
+                        true
+                    }
+                }
 
                 for (s in samples) {
-                    if (s.current != 0f && s.voltage != 0f) {
-                        batchPowerSum += s.voltage.toDouble() * s.current.toDouble() / 1_000_000.0
-                        batchPowerCount++
-                    }
-
+                    if (packetConnection != connectionEpoch.get()) break
                     if (recorder.isRecording.value) {
                         recorder.addSample(s.voltage, s.current, s.timestamp)
                     }
-
-                    // The ring buffer always records, so returning to the Main
-                    // page shows a continuous timeline instead of a straight
-                    // line bridging the gap. The primitive ring makes this
-                    // nearly free; only the republish step below is gated on
-                    // mainScreenVisible.
-                    val timeMs = sampleTimeMs(s.timestamp)
-                    synchronized(bufferLock) {
-                        waveBuffer.addLast(s.voltage, s.current, timeMs)
-                    }
                 }
 
-                if (batchPowerCount > 0) {
-                    synchronized(bufferLock) {
-                        validPowerSum += batchPowerSum
-                        validPowerCount += batchPowerCount
-                    }
-                }
+                // Initial USB/ADC startup data remains available to the raw
+                // recorder but does not set the chart scale or live readings.
+                if (!previewReady) return@collect
 
                 if (mainVisible && now - lastUpdateTimeMs >= updateIntervalMs) {
                     lastUpdateTimeMs = now
 
-                    synchronized(bufferLock) {
+                    val revision = synchronized(bufferLock) {
                         if (waveBuffer.count > 0) {
                             val windowStart = waveBuffer.lastTimeMs() - _visibleTimeMs.value
 
@@ -268,14 +240,14 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                         } else {
                             windowScratch.clear()
                         }
+                        waveformRevision
                     }
                     windowScratch.reverse()
 
-                    _waveformData.value = lttbDownsample(windowScratch, 200)
-
-                    // Release any excess internal array capacity that grew
-                    // during a large visible window.
-                    windowScratch.trimToSize()
+                    val displayed = downsampleWaveform(windowScratch, 200)
+                    synchronized(bufferLock) {
+                        if (revision == waveformRevision) _waveformData.value = displayed
+                    }
                 }
 
                 if (now - lastValuePanelUpdateTimeMs >= valuePanelUpdateIntervalMs) {
@@ -284,67 +256,47 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                     _currentVoltage.value = last.voltage
                     _currentCurrent.value = last.current
 
-                    if (validPowerCount > 0) {
-                        _averagePower.value = (validPowerSum / validPowerCount).toFloat()
+                    synchronized(bufferLock) {
+                        _averagePower.value = powerStatistics.averageWatts
                     }
 
-                if (recorder.isRecording.value && com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
-                    val ctx = getApplication<Application>()
-                    IslandHelper.showLiveMeasurement(
-                        context = ctx,
-                        voltage = last.voltage,
-                        current = last.current,
-                        power = last.voltage * last.current / 1_000_000f,
-                        avgPower = _averagePower.value,
-                        isRecording = true
-                    )
+                    recordingControlMutex.withLock {
+                        showRecordingNotification()
+                    }
                 }
             }
         }
 
-        // A mid-recording write failure stops the recorder silently inside
-        // Recorder; surface it to the user once per failure (StateFlow only
-        // re-emits on change).
+        // This collector runs alongside sample processing, not after the
+        // infinite sample flow. Events retain their reason across retries.
         viewModelScope.launch(Dispatchers.Main) {
-            recorder.failed.collect { failed ->
-                if (failed) {
-                    _connectionEvents.send(appString(R.string.recording_lost))
+            recorder.events.collect { event ->
+                recordingControlMutex.withLock {
+                    if (!recorder.isRecording.value) cancelRecordingNotification()
                 }
+                val message = when (event) {
+                    is Recorder.RecordingEvent.Failed -> {
+                        when (event.stage) {
+                            Recorder.FailureStage.START -> R.string.recording_start_failed
+                            Recorder.FailureStage.SAMPLE_OVERFLOW -> R.string.event_sample_queue_overflow
+                            else -> R.string.recording_lost
+                        }
+                    }
+                    Recorder.RecordingEvent.Completed -> R.string.recording_auto_stopped
+                }
+                _connectionEvents.send(appString(message))
             }
         }
     }
-    }
 
-    /**
-     * Session-elapsed ms for the waveform x-axis. Uses the firmware's per-batch
-     * µs timestamp (converted to ms) so the axis matches the recorded file;
-     * restarts the baseline if the device uptime goes backwards (reboot
-     * without a disconnect), dropping the stale timeline with it.
-     */
-    private fun sampleTimeMs(deviceTimestampUs: Long): Long {
-        if (deviceTimestampUs <= 0) {
-            if (fallbackStartMs == 0L) fallbackStartMs = System.currentTimeMillis()
-            return System.currentTimeMillis() - fallbackStartMs
-        }
-        if (deviceEpochUs < 0 || deviceTimestampUs < lastDeviceTimestampUs) {
-            deviceEpochUs = deviceTimestampUs
-            synchronized(bufferLock) { waveBuffer.clear() }
-        }
-        lastDeviceTimestampUs = deviceTimestampUs
-        return (deviceTimestampUs - deviceEpochUs) / 1000
-    }
-
-    private fun resetStats() {
-        deviceEpochUs = -1L
-        lastDeviceTimestampUs = -1L
-        fallbackStartMs = 0L
+    /** Caller holds bufferLock; recording and its timestamps are independent. */
+    private fun resetWaveformLocked() {
+        waveBuffer.clear()
+        waveformTimeline.reset()
+        waveformRevision++
+        _waveformData.value = emptyList()
         lastUpdateTimeMs = 0L
         lastValuePanelUpdateTimeMs = 0L
-        synchronized(bufferLock) {
-            validPowerSum = 0.0
-            validPowerCount = 0L
-        }
-        _averagePower.value = 0f
     }
 
     private fun appString(id: Int): String =
@@ -399,6 +351,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun disconnect() {
+        autoConnectJob?.cancel()
         usbManager.disconnect()
         _isConnected.value = false
         viewModelScope.launch(Dispatchers.Main) {
@@ -435,56 +388,78 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun toggleRecording() {
+        // The button may be tapped again before its IO job publishes a new
+        // state. Drop duplicate requests rather than starting two sessions.
+        if (recordingActionJob?.isActive == true) return
         val ctx = getApplication<Application>()
-        if (recorder.isRecording.value) {
-            viewModelScope.launch(Dispatchers.IO) {
-                recorder.stop()
-                if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
-                    IslandHelper.cancelNotification(ctx)
+        val shouldStop = recorder.isRecording.value
+        val requestedEpoch = connectionEpoch.get()
+        recordingActionJob = viewModelScope.launch(Dispatchers.IO) {
+            recordingControlMutex.withLock {
+                if (shouldStop) {
+                    recorder.stop()
+                    cancelRecordingNotification()
+                } else if (_isConnected.value && !cleared && connectionEpoch.get() == requestedEpoch) {
+                    recordingConnectionEpoch = requestedEpoch
+                    recorder.start(File(ctx.filesDir, "recordings"))
+                    if (!_isConnected.value || connectionEpoch.get() != requestedEpoch) {
+                        recorder.stop()
+                        cancelRecordingNotification()
+                    } else {
+                        showRecordingNotification()
+                    }
                 }
             }
-        } else {
-            // File creation and the old-recordings sweep are disk I/O — keep
-            // them off the main thread.
-            viewModelScope.launch(Dispatchers.IO) {
-                recorder.start(File(ctx.filesDir, "recordings"))
-                if (!recorder.isRecording.value) {
-                    Log.e(TAG, "recording start failed")
-                    _connectionEvents.send(appString(R.string.recording_start_failed))
-                    return@launch
-                }
-                if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
-                    IslandHelper.showLiveMeasurement(
-                        context = ctx,
-                        voltage = _currentVoltage.value,
-                        current = _currentCurrent.value,
-                        power = _currentVoltage.value * _currentCurrent.value / 1_000_000f,
-                        avgPower = _averagePower.value,
-                        isRecording = true
-                    )
-                }
-            }
+        }
+    }
+
+    private fun showRecordingNotification() {
+        if (cleared || !recorder.isRecording.value ||
+            !com.irregular.xenopowermeter.AppSettings.notificationEnabled
+        ) return
+        // A notification failure must never kill the sample collector.
+        try {
+            IslandHelper.showLiveMeasurement(
+                context = getApplication(),
+                voltage = _currentVoltage.value,
+                current = _currentCurrent.value,
+                power = _currentVoltage.value * _currentCurrent.value / 1_000_000f,
+                avgPower = _averagePower.value,
+                isRecording = true
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "notification update failed", e)
+        } finally {
+            // Teardown or a preference change can race with notification
+            // construction. Undo a late notify after the earlier cancellation.
+            if (cleared || !recorder.isRecording.value ||
+                !com.irregular.xenopowermeter.AppSettings.notificationEnabled
+            ) cancelRecordingNotification()
+        }
+    }
+
+    private fun cancelRecordingNotification() {
+        try {
+            IslandHelper.cancelNotification(getApplication())
+        } catch (e: Exception) {
+            Log.e(TAG, "notification cleanup failed", e)
         }
     }
 
     fun clearWaveform() {
-        synchronized(bufferLock) { waveBuffer.clear() }
-        _waveformData.value = emptyList()
-        resetStats()
+        synchronized(bufferLock) {
+            resetWaveformLocked()
+            powerStatistics.clear()
+            _averagePower.value = 0f
+        }
     }
 
     override fun onCleared() {
+        cleared = true
         super.onCleared()
-        val ctx = getApplication<Application>()
-        if (recorder.isRecording.value) {
-            // viewModelScope is already cancelled by the time onCleared runs,
-            // so flush/close the stream synchronously — otherwise up to 64 KB
-            // of the recording is lost here.
-            recorder.stop()
-            if (com.irregular.xenopowermeter.AppSettings.notificationEnabled) {
-                IslandHelper.cancelNotification(ctx)
-            }
-        }
+        // Also rejects an IO start that was queued before this ViewModel died.
+        recorder.close()
+        cancelRecordingNotification()
         usbManager.disconnect()
     }
 
@@ -501,7 +476,7 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
 /**
  * Fixed-capacity FIFO ring for waveform samples in flat primitive arrays.
  * Replaces a Triple-boxing ArrayDeque that allocated ~10k objects/s and held
- * ~17 MB of heap for the same window; this holds 200k samples in ~3.2 MB of
+ * ~17 MB of heap for the same window; this holds 200k samples in ~4.8 MB of
  * flat arrays with zero per-sample allocation.
  *
  * Single writer (the collector coroutine); cross-thread [clear] and the
@@ -511,12 +486,13 @@ private class WaveformRingBuffer(private val capacity: Int) {
     private val voltage = FloatArray(capacity)
     private val current = FloatArray(capacity)
     private val timeMs = LongArray(capacity)
+    private val segmentId = LongArray(capacity)
     private var head = 0
 
     var count = 0
         private set
 
-    fun addLast(v: Float, i: Float, t: Long) {
+    fun addLast(v: Float, i: Float, t: Long, segment: Long) {
         val pos = (head + count) % capacity
         if (count == capacity) {
             head = (head + 1) % capacity
@@ -526,6 +502,7 @@ private class WaveformRingBuffer(private val capacity: Int) {
         voltage[pos] = v
         current[pos] = i
         timeMs[pos] = t
+        segmentId[pos] = segment
     }
 
     fun lastTimeMs(): Long = timeMs[(head + count - 1) % capacity]
@@ -539,16 +516,15 @@ private class WaveformRingBuffer(private val capacity: Int) {
      * Appends newest-first entries with time >= windowStartMs to [out]. The
      * buffer is time-ordered, so the backward walk stops at the first older
      * entry; the caller reverses [out] afterwards. Entries are boxed into
-     * Triples here — only the ≤8 s visible window, so the cost is trivial
-     * compared to boxing every sample.
+     * display points here, including continuity IDs from the original packets.
      */
-    fun copyWindowNewestFirst(windowStartMs: Long, out: MutableList<Triple<Float, Float, Long>>) {
+    fun copyWindowNewestFirst(windowStartMs: Long, out: MutableList<WaveformPoint>) {
         out.clear()
         var idx = count - 1
         while (idx >= 0) {
             val pos = (head + idx) % capacity
             if (timeMs[pos] < windowStartMs) break
-            out.add(Triple(voltage[pos], current[pos], timeMs[pos]))
+            out.add(WaveformPoint(voltage[pos], current[pos], timeMs[pos], segmentId[pos]))
             idx--
         }
     }

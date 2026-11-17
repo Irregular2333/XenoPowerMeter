@@ -106,6 +106,7 @@
         <item>修复了关于页出现异常灰色遮罩的问题</item>
         <item>优化了关于页的显示效果</item>
         <item>优化了录制数据功能的稳定性</item>
+        <item>优化了APK包体的存储占用</item>
     </string-array>
     <string-array name="changelog_2_2_0">
         <item>优化了应用的显示效果</item>

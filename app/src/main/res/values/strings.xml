@@ -113,6 +113,7 @@
         <item>Fixed an abnormal gray overlay appearing on the About page</item>
         <item>Improved the visual presentation of the About page</item>
         <item>Improved the stability of the data recording feature</item>
+        <item>Reduced the APK storage footprint</item>
     </string-array>
     <string-array name="changelog_2_2_0">
         <item>Improved the app\'s visual presentation</item>

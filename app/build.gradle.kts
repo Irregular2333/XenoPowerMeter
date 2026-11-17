@@ -20,8 +20,8 @@ android {
         applicationId = "com.irregular.xenopowermeter"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2002000
-        versionName = "2.2.0"
+        versionCode = 2002001
+        versionName = "2.2.1"
 
         // Bake the build date into the APK at compile time (zip entry
         // timestamps are normalized by the toolchain, so the About page
@@ -50,6 +50,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // Ship only the locales the app actually translates. Every AAR (AppCompat,
+    // Compose, Material) bundles 80+ language tables; without this filter they
+    // all land in resources.arsc.
+    androidResources {
+        localeFilters += listOf("en", "ja", "zh")
     }
 
     packaging {

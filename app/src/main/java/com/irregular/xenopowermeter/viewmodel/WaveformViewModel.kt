@@ -10,6 +10,7 @@ import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.data.usb.ProtocolParser
 import com.irregular.xenopowermeter.data.usb.UsbCdcManager
 import com.irregular.xenopowermeter.notification.IslandHelper
+import com.irregular.xenopowermeter.notification.RecordingForegroundService
 import com.irregular.xenopowermeter.recording.Recorder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -407,6 +408,14 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
                         cancelRecordingNotification()
                     } else {
                         showRecordingNotification()
+                        // The foreground service is what actually protects the
+                        // recording from battery savers; the notification it
+                        // reuses is guarded by the same preference.
+                        if (com.irregular.xenopowermeter.AppSettings.notificationEnabled &&
+                            !cleared && recorder.isRecording.value
+                        ) {
+                            RecordingForegroundService.start(ctx)
+                        }
                     }
                 }
             }
@@ -443,6 +452,14 @@ class WaveformViewModel(application: Application) : AndroidViewModel(application
             IslandHelper.cancelNotification(getApplication())
         } catch (e: Exception) {
             Log.e(TAG, "notification cleanup failed", e)
+        }
+        // Every "recording is no longer active" path funnels through here, so
+        // the service's lifecycle rides on it. stopService is a no-op when the
+        // service is not running.
+        try {
+            RecordingForegroundService.stop(getApplication())
+        } catch (e: Exception) {
+            Log.e(TAG, "foreground service stop failed", e)
         }
     }
 

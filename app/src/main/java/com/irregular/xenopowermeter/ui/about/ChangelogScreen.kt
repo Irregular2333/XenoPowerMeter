@@ -97,7 +97,8 @@ private data class ChangelogRelease(
 
 /** Newest first — the newest card sits at the top of the page. */
 private val changelogReleases = listOf(
-    ChangelogRelease("2.2.0", R.array.changelog_2_2_0, isLatest = true),
+    ChangelogRelease("2.2.1", R.array.changelog_2_2_1, isLatest = true),
+    ChangelogRelease("2.2.0", R.array.changelog_2_2_0),
     ChangelogRelease("2.1.0", R.array.changelog_2_1_0),
     ChangelogRelease("2.0.3", R.array.changelog_2_0_3),
     ChangelogRelease("2.0.2", R.array.changelog_2_0_2),
@@ -117,6 +118,14 @@ private val ContentMaxWidth = 1080.dp
  * recognisable while the gesture is held.
  */
 private const val ScrimAlpha = 0.4f
+
+/**
+ * Travel fraction past which the sheet's lift (shadow) fades to zero. Beyond
+ * this point the card barely overlaps the screen any more, so a shadow there
+ * is invisible during the motion but keeps spilling back onto the screen edge
+ * while the card sits parked off-screen — see the note at the graphicsLayer.
+ */
+private const val ParkShadowFadeStart = 0.85f
 
 /**
  * How long the page takes to arrive, and to leave once the way out has been
@@ -316,7 +325,20 @@ fun ChangelogScreen(
                         shape = RoundedCornerShape(
                             20.dp * (progress * 2.5f).coerceAtMost(1f)
                         )
-                        shadowElevation = 16.dp.toPx() * (progress * 2f).coerceAtMost(1f)
+                        // The lift must die before the card parks: the parked
+                        // card's left edge sits exactly on the screen's right
+                        // edge, and a full-strength shadow there spills back
+                        // into the visible screen as a faint gray gradient
+                        // over the page's right edge (it showed up a beat
+                        // after the About tab settled, when the pre-warm
+                        // composed this page). The lift only reads while the
+                        // card is actually overlapping the page, so it fades
+                        // out over the last stretch of travel.
+                        val parkFade =
+                            ((progress - ParkShadowFadeStart) / (1f - ParkShadowFadeStart))
+                                .coerceIn(0f, 1f)
+                        shadowElevation = 16.dp.toPx() *
+                            (progress * 2f).coerceAtMost(1f) * (1f - parkFade)
                     } else {
                         shadowElevation = 0f
                     }

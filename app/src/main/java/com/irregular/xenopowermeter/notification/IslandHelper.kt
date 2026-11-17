@@ -17,7 +17,8 @@ import org.json.JSONObject
 object IslandHelper {
 
     private const val CHANNEL_ID = "power_meter_live"
-    private const val NOTIFICATION_ID = 1001
+    // Shared with RecordingForegroundService: one tray entry does two jobs.
+    internal const val NOTIFICATION_ID = 1001
     private const val PREF_NAME = "island_helper"
     private const val KEY_RECORDING_START_MS = "recording_start_ms"
 
@@ -74,6 +75,29 @@ object IslandHelper {
         isRecording: Boolean
     ) {
         val nm = notificationManager ?: return
+        nm.notify(NOTIFICATION_ID, buildLiveMeasurementNotification(
+            context, voltage, current, power, avgPower, isRecording
+        ))
+    }
+
+    /**
+     * The foreground service's notification. It shares [NOTIFICATION_ID] and
+     * the channel with the live-measurement push, so once the service calls
+     * startForeground with it, the tray keeps showing exactly one entry —
+     * the one the user already opted into — while the sample loop's regular
+     * notify() calls with the same id keep refreshing its content in place.
+     */
+    fun buildForegroundNotification(context: Context): Notification =
+        buildLiveMeasurementNotification(context, 0f, 0f, 0f, 0f, isRecording = true)
+
+    private fun buildLiveMeasurementNotification(
+        context: Context,
+        voltage: Float,
+        current: Float,
+        power: Float,
+        avgPower: Float,
+        isRecording: Boolean
+    ): Notification {
         // Resolve strings in the in-app locale so a hot language switch is
         // reflected on the very next update.
         val context = com.irregular.xenopowermeter.AppSettings.localizedContext(context)
@@ -151,7 +175,7 @@ object IslandHelper {
         val notification = builder.build()
         notification.extras.putString("miui.focus.param", islandParams)
 
-        nm.notify(NOTIFICATION_ID, notification)
+        return notification
     }
 
     private fun buildIslandParams(

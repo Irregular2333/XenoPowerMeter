@@ -102,6 +102,11 @@
     <string name="back">戻る</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_1">
+        <item>バージョン情報ページに異常な灰色のオーバーレイが表示される問題を修正</item>
+        <item>バージョン情報ページの表示を改善</item>
+        <item>データ記録機能の安定性を改善</item>
+    </string-array>
     <string-array name="changelog_2_2_0">
         <item>アプリの表示を改善</item>
         <item>タブレット表示の切り替えロジックを改善</item>

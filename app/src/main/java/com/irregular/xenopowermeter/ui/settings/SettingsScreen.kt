@@ -34,6 +34,7 @@ import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.RangeMode
 import com.irregular.xenopowermeter.notification.IslandHelper
+import com.irregular.xenopowermeter.notification.RecordingForegroundService
 import com.irregular.xenopowermeter.ui.BottomBarInset
 import com.irregular.xenopowermeter.ui.BottomBarTopEdge
 import com.irregular.xenopowermeter.ui.BottomMeltOverhang
@@ -976,6 +977,10 @@ private fun NotificationSetting(
                         } else {
                             AppSettings.updateNotificationEnabled(false)
                             IslandHelper.cancelNotification(context)
+                            // Without a notification the service has nothing to
+                            // anchor on, and Android would swap in its own
+                            // "app is running in background" notice instead.
+                            RecordingForegroundService.stop(context)
                         }
                     },
                 contentAlignment = Alignment.CenterStart

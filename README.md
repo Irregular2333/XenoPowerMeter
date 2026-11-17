@@ -83,8 +83,14 @@ app/src/main/java/com/irregular/xenopowermeter/
 │       └── DataConverter.kt            // 数据格式化(电压/电流/功率显示)
 ├── recording/
 │   └── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
-└── notification/
-    └── IslandHelper.kt                 // 通知通道管理+小米HyperOS超级岛适配
+├── notification/
+│   ├── IslandHelper.kt                 // 通知通道管理+小米HyperOS超级岛适配
+│   └── RecordingForegroundService.kt   // 录制期前台服务(进程保活,复用实时通知)
+└── (单元测试 app/src/test/)
+    ├── data/usb/                       // Crc16/UsbAdcPacket/FrameDemuxer/ProtocolParser
+    ├── data/model/                     // Calibration
+    ├── data/converter/                 // DataConverter
+    └── viewmodel/                      // Recorder/WaveformDownsampler/WaveformTimeline等
 ```
 
 ## 特别感谢：

@@ -89,7 +89,7 @@ fun AboutScreen(onOpenChangelog: () -> Unit) {
     }
 
     val scrollState = rememberScrollState()
-    val imageHeightDp = (screenHeightDp * 0.3f).dp
+    val imageHeightDp = (screenHeightDp * 0.27f).dp
 
     if (isLandscape) {
         LandscapeAboutLayout(
@@ -148,12 +148,16 @@ private fun AboutPage(
                 // copy of this, and a transparent copy would let the sharp
                 // page show through and ghost.
                 .background(MaterialTheme.colorScheme.background)
-                // Content fades into the photo before it is recorded, over the
-                // same distance the blur takes to reach full strength.
-                .scrollEdgeContentFade(
-                    progress = { topEdgeProgress.value },
-                    headerHeight = imageHeightDp + TopBarMaterialHeight + TopBarSkirt,
-                    headerTop = imageHeightDp
+                .then(
+                    if (!isLandscape) {
+                        Modifier.scrollEdgeContentFade(
+                            progress = { topEdgeProgress.value },
+                            headerHeight = imageHeightDp + TopBarMaterialHeight + TopBarSkirt,
+                            headerTop = imageHeightDp
+                        )
+                    } else {
+                        Modifier
+                    }
                 )
                 // Bottom mirror of the same dissolve: rows melt into the page
                 // as they slide under the pill, always on like the band's

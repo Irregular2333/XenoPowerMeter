@@ -109,6 +109,11 @@
     <string name="back">Back</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_1">
+        <item>Fixed an abnormal gray overlay appearing on the About page</item>
+        <item>Improved the visual presentation of the About page</item>
+        <item>Improved the stability of the data recording feature</item>
+    </string-array>
     <string-array name="changelog_2_2_0">
         <item>Improved the app\'s visual presentation</item>
         <item>Improved the tablet display switching logic</item>

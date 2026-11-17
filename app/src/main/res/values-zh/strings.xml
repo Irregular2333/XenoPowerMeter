@@ -102,6 +102,11 @@
     <string name="back">返回</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_1">
+        <item>修复了关于页出现异常灰色遮罩的问题</item>
+        <item>优化了关于页的显示效果</item>
+        <item>优化了录制数据功能的稳定性</item>
+    </string-array>
     <string-array name="changelog_2_2_0">
         <item>优化了应用的显示效果</item>
         <item>优化了平板显示切换的逻辑</item>

@@ -170,7 +170,13 @@ class MainActivity : AppCompatActivity() {
                 val language = AppSettings.language
                 val localizedContext = remember(language) { AppSettings.localizedContext(this) }
                 CompositionLocalProvider(
-                    LocalContext provides LocalizedActivityContext(localizedContext, this)
+                    LocalContext provides LocalizedActivityContext(localizedContext, this),
+                    // The navigationevent compose local resolves via a View-tree
+                    // tag that only ComponentActivity.setContentView sets, and
+                    // AppCompatActivity's delegate path skips that — so provide
+                    // the owner explicitly or miuix popups crash on first render.
+                    androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+                        provides this
                 ) {
                     XenoPowerApp(usbAttachEvents)
                 }

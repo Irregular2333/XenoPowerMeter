@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +45,7 @@ import com.irregular.xenopowermeter.ui.PageEndGutter
 import com.irregular.xenopowermeter.ui.RailPageStart
 import com.irregular.xenopowermeter.ui.isTabletLandscape
 import com.irregular.xenopowermeter.ui.theme.AppColors
+import top.yukonga.miuix.kmp.utils.MiuixIndication
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.irregular.xenopowermeter.ui.ProgressiveBottomBlur
@@ -356,6 +358,25 @@ private fun AboutHeaderImage(imageHeightDp: androidx.compose.ui.unit.Dp, modifie
     }
 }
 
+/**
+ * The settings page's miuix press highlight, usable outside MiuixTheme:
+ * MiuixIndication is self-contained (just a tint color + folme springs), so
+ * pass the same labelColor the settings theme feeds MiuixTheme with and the
+ * rows here highlight exactly like the settings rows. The highlight covers
+ * the full row — apply this BEFORE the row's horizontal content padding.
+ * Info rows pass an empty onClick: highlight plays, nothing happens.
+ */
+@Composable
+private fun Modifier.miuixPressable(onClick: () -> Unit): Modifier {
+    val color = AppColors.labelColor()
+    val interactionSource = remember { MutableInteractionSource() }
+    return clickable(
+        interactionSource = interactionSource,
+        indication = remember(color) { MiuixIndication(color = color) },
+        onClick = onClick
+    )
+}
+
 @Composable
 private fun VersionInfoSection(onOpenChangelog: () -> Unit) {
     Text(
@@ -395,11 +416,16 @@ private fun VersionInfoCard(onOpenChangelog: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // Settings recipe: no card padding — rows span the full card width at
+        // 44dp with the miuix press highlight full-bleed (clipped to the card
+        // corners), each row insets its own content by 16dp.
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
+                    .height(44.dp)
+                    .miuixPressable(onClick = {})
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -409,7 +435,9 @@ private fun VersionInfoCard(onOpenChangelog: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
+                    .height(44.dp)
+                    .miuixPressable(onClick = {})
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -419,8 +447,9 @@ private fun VersionInfoCard(onOpenChangelog: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
-                    .clickable(onClick = onOpenChangelog),
+                    .height(44.dp)
+                    .miuixPressable(onClick = onOpenChangelog)
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -458,11 +487,14 @@ private fun AuthorCard(context: android.content.Context) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // Same settings recipe: full-bleed 44dp pressable rows.
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
+                    .height(44.dp)
+                    .miuixPressable(onClick = {})
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -472,12 +504,15 @@ private fun AuthorCard(context: android.content.Context) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
-                    .clickable {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Irregular2333/XenoPowerMeter"))
-                        )
-                    },
+                    .height(44.dp)
+                    .miuixPressable(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Irregular2333/XenoPowerMeter"))
+                            )
+                        }
+                    )
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -515,30 +550,40 @@ private fun SpecialThanksCard(context: android.content.Context) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // Same settings recipe: full-bleed 44dp pressable rows.
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
-                    .clickable {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://www.nintendo.com/zh-hans-hk/games/switch2/bas6a/index.html"))
-                        )
-                    },
+                    .height(44.dp)
+                    .miuixPressable(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.nintendo.com/zh-hans-hk/games/switch2/bas6a/index.html"))
+                            )
+                        }
+                    )
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(stringResource(R.string.game), fontSize = 15.sp, color = labelColor)
                 Text(stringResource(R.string.game_xenoblade), fontSize = 15.sp, color = valueColor)
             }
+            // Order: the game first, then miuix (the UI library this whole
+            // look is built on), Glasmio, Power-Pico, NexioSchedule,
+            // Android Liquid Glass, and the JRPG shout-out last.
+            ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_miuix), url = "https://github.com/compose-miuix-ui/miuix", labelColor = labelColor, valueColor = valueColor)
+            ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_glasmio), url = "https://github.com/NEORUAA/Glasmio", labelColor = labelColor, valueColor = valueColor)
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_power_pico), url = "https://github.com/No-Chicken/Power-Pico", labelColor = labelColor, valueColor = valueColor)
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_nexio_schedule), url = "https://github.com/HaoZai000/NexioSchedule", labelColor = labelColor, valueColor = valueColor)
             ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_liquid_glass), url = "https://github.com/Kyant0/AndroidLiquidGlass", labelColor = labelColor, valueColor = valueColor)
-            ThanksRow(label = stringResource(R.string.github), name = stringResource(R.string.github_glasmio), url = "https://github.com/NEORUAA/Glasmio", labelColor = labelColor, valueColor = valueColor)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
+                    .height(44.dp)
+                    .miuixPressable(onClick = {})
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -564,10 +609,13 @@ private fun ThanksRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp)
-            .clickable {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            },
+            .height(44.dp)
+            .miuixPressable(
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
+            )
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

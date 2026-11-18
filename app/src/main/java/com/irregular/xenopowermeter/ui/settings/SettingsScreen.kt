@@ -6,14 +6,11 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,7 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -29,7 +26,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.blur.layerBackdrop as miuixLayerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop as rememberMiuixLayerBackdrop
 import androidx.core.content.ContextCompat
+import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
+import top.yukonga.miuix.kmp.basic.SwitchDefaults
 import com.irregular.xenopowermeter.AppSettings
 import com.irregular.xenopowermeter.R
 import com.irregular.xenopowermeter.data.model.RangeMode
@@ -203,7 +205,40 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
     val isLandscape = isTabletLandscape()
     val settingsScrollState = rememberScrollState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // The miuix Scaffold only acts as the popup host (the dropdowns render
+    // their glass menus through MiuixPopupHost). Transparent background and
+    // zero insets keep it invisible; the app's own layout below is untouched.
+    //
+    // The glass menus blur a backdrop layer of this page: background color +
+    // cards, drawn here INSIDE the scaffold content so the popup host (drawn
+    // by the scaffold itself, a sibling above this box) is excluded — the
+    // panel must never sample itself.
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val backgroundColorState = rememberUpdatedState(backgroundColor)
+    val glassBackdropOnDraw: ContentDrawScope.() -> Unit = remember {
+        {
+            drawRect(backgroundColorState.value)
+            drawContent()
+        }
+    }
+    val glassBackdrop = rememberMiuixLayerBackdrop(onDraw = glassBackdropOnDraw)
+    val glassDropdownHost = remember { mutableStateListOf<GlassDropdownEntry>() }
+
+    MiuixSettingsTheme {
+        CompositionLocalProvider(
+            LocalGlassBackdrop provides glassBackdrop,
+            LocalGlassDropdownHost provides glassDropdownHost
+        ) {
+        MiuixScaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        ) { _ ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .miuixLayerBackdrop(glassBackdrop)
+            ) {
         if (isLandscape) {
             LandscapeSettingsLayout(
                 scrollState = settingsScrollState,
@@ -262,6 +297,20 @@ fun SettingsScreen(viewModel: WaveformViewModel) {
                     .padding(bottom = bottomBarZone + 16.dp)
             }
         )
+            }
+
+            // Glass dropdown popups registered by the rows, rendered here as a
+            // layer ABOVE the backdrop-sampled content (so the panels never
+            // sample themselves). No PopupLayout wrapper: the glass surface
+            // handles outside taps itself and leaves no touch interceptor
+            // behind after dismissal.
+            glassDropdownHost.forEach { entry ->
+                key(entry) {
+                    entry.content()
+                }
+            }
+        }
+        } // CompositionLocalProvider(LocalGlassBackdrop)
     }
 }
 
@@ -489,7 +538,12 @@ private fun DisplayCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        // No padding at all: the four rows span the full card and each is
+        // exactly one quarter of the card height, so the miuix press
+        // highlight covers a perfect quarter of the card, clipped to the
+        // rounded corners. Rows inset their own content by 16dp
+        // (MiuixRowInsideMargin).
+        Column {
             // Everything on this card shows its new value the moment it is
             // picked, so none of it announces itself with a snackbar.
             LanguageSetting(labelColor, valueColor)
@@ -524,14 +578,27 @@ private fun DataRecordCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp)) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+        // Same recipe as DisplayCard: no card padding — every row spans the
+        // full card width at a uniform 44dp (the duration-limit row's miuix
+        // press highlight covers its whole line, clipped to the rounded
+        // corners), each row insets its own content by 16dp, and the button
+        // row carries its own vertical spacing. Every row is miuix-demo
+        // pressable: dropdown/switch rows act on tap, the pure read-out rows
+        // (count / duration) show the highlight but trigger nothing.
+        Column {
+            Column {
                 AutoConnectSetting(labelColor, valueColor)
                 NotificationSetting(labelColor, valueColor, permissionLauncher)
                 RecordingDurationLimitSetting(labelColor, valueColor)
 
+                // Pure read-outs, but still miuix-demo pressable rows: the
+                // tap target covers the whole line and the MiuixIndication
+                // highlight plays on press, while the empty onClick makes
+                // sure nothing actually happens on release.
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                        .clickable(onClick = {})
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -539,7 +606,9 @@ private fun DataRecordCard(
                     Text(String.format(stringResource(R.string.recording_value), entryCount), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = valueColor)
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                        .clickable(onClick = {})
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -552,7 +621,14 @@ private fun DataRecordCard(
             var showClearDialog by remember { mutableStateOf(false) }
             var clearSessionId by remember { mutableLongStateOf(0L) }
             Row(
-                modifier = Modifier.fillMaxWidth().height(40.dp),
+                modifier = Modifier.fillMaxWidth()
+                    // Perceived margin, not box margin: the row above centers
+                    // its 15sp/24dp text in 44dp, leaving ~10dp of whitespace
+                    // under the text. 2dp here makes the VISIBLE gap between
+                    // that text and the button 12dp — matching the left/right
+                    // and bottom insets exactly.
+                    .padding(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 12.dp)
+                    .height(40.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -705,8 +781,11 @@ private fun CalibrationCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Column(modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp)) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+        // Same recipe as DisplayCard: no card padding, rows span the full
+        // card width at a uniform 44dp and inset their own content by 16dp;
+        // the read button carries its own spacing.
+        Column {
+            Column {
                 CalibrationRow(stringResource(R.string.calibration_low_scale), calibration.lowScaleMultiplier)
                 CalibrationRow(stringResource(R.string.calibration_low_offset), calibration.lowOffsetUa, "\u03BCA")
                 CalibrationRow(stringResource(R.string.calibration_mid_scale), calibration.midScaleMultiplier)
@@ -718,7 +797,13 @@ private fun CalibrationCard(
             Button(
                 onClick = { viewModel.loadCalibration() },
                 enabled = isConnected,
-                modifier = Modifier.fillMaxWidth().height(40.dp),
+                modifier = Modifier.fillMaxWidth()
+                    // Same perceived-margin trick as the device card: the
+                    // last calibration row leaves ~10dp of centered-text
+                    // whitespace below it, so 2dp here yields a visible 12dp
+                    // gap — identical to the left/right/bottom insets.
+                    .padding(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 12.dp)
+                    .height(40.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = settingsButtonColor,
                     contentColor = AppColors.buttonTextColor(),
@@ -742,113 +827,47 @@ private fun CalibrationCard(
 }
 
 /**
- * A label / value row whose value opens a dropdown.
- *
- * The menu is anchored to the 130dp value slot instead of to the whole row. A
- * row-wide anchor plus the old -80dp nudge parked the popup against the
- * window's leading edge — which in landscape is exactly where the navigation
- * rail floats, so opening "Language" dropped the list on top of the glass.
- * Anchored to the value, the menu opens under the chevron, inside the card.
+ * Content inset for miuix preference rows. The horizontal 16dp matches the
+ * card padding the hand-built rows live under, but is applied INSIDE the row:
+ * the row itself spans the full card width, so the miuix press/hold highlight
+ * covers the whole line (clipped to the card's rounded corners by the card
+ * surface) instead of an inset rectangle. Vertical 8dp + title line height
+ * keeps the ~38dp rhythm the hand-built rows use.
  */
-@Composable
-private fun SettingRow(
-    label: String,
-    value: String,
-    labelColor: androidx.compose.ui.graphics.Color,
-    valueColor: androidx.compose.ui.graphics.Color,
-    menu: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(38.dp)
-            .clickable { expanded = true },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 15.sp, color = labelColor)
-        Box(
-            modifier = Modifier.width(130.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text(value, fontSize = 15.sp, color = valueColor)
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = valueColor, modifier = Modifier.size(18.dp))
-            }
+private val MiuixRowInsideMargin = androidx.compose.foundation.layout.PaddingValues(
+    horizontal = 16.dp, vertical = 8.dp
+)
 
-            // Inside the value Box on purpose: the popup positions itself
-            // against its parent layout node, so this is what keeps it on the
-            // page rather than over the rail.
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                menu { expanded = false }
-            }
-        }
-    }
-}
+/**
+ * Display card rows: exactly one quarter of the card each (card height is
+ * 4 x 44dp = 176dp), so the press highlight covers exactly a quarter of the
+ * card. Also the uniform row height for the Device and Calibration cards.
+ */
+private val MiuixDisplayRowHeight = Modifier.height(44.dp)
 
 @Composable
 private fun LanguageSetting(
     labelColor: androidx.compose.ui.graphics.Color,
     valueColor: androidx.compose.ui.graphics.Color
 ) {
-    val context = LocalContext.current
-    val langCtx = AppSettings.localizedContext(context)
+    val langCtx = AppSettings.localizedContext(LocalContext.current)
     val currentLanguage = AppSettings.language
 
-    val languageText = when (currentLanguage) {
-        AppSettings.Language.SYSTEM -> stringResource(R.string.system_default)
-        AppSettings.Language.CHINESE -> stringResource(R.string.chinese)
-        AppSettings.Language.ENGLISH -> stringResource(R.string.english)
-        AppSettings.Language.JAPANESE -> stringResource(R.string.japanese)
-    }
-    val sysText = langCtx.getString(R.string.system_default)
-    val zhText = langCtx.getString(R.string.chinese)
-    val enText = langCtx.getString(R.string.english)
-    val jaText = langCtx.getString(R.string.japanese)
-
-    SettingRow(
-        label = stringResource(R.string.language),
-        value = languageText,
-        labelColor = labelColor,
-        valueColor = valueColor
-    ) { dismiss ->
-        DropdownMenuItem(
-            text = { Text(sysText) },
-            onClick = {
-                AppSettings.updateLanguage(AppSettings.Language.SYSTEM)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(zhText) },
-            onClick = {
-                AppSettings.updateLanguage(AppSettings.Language.CHINESE)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(enText) },
-            onClick = {
-                AppSettings.updateLanguage(AppSettings.Language.ENGLISH)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(jaText) },
-            onClick = {
-                AppSettings.updateLanguage(AppSettings.Language.JAPANESE)
-                dismiss()
-            }
-        )
-    }
+    SettingsDropdownPreference(
+        title = stringResource(R.string.language),
+        items = listOf(
+            langCtx.getString(R.string.system_default),
+            langCtx.getString(R.string.chinese),
+            langCtx.getString(R.string.english),
+            langCtx.getString(R.string.japanese)
+        ),
+        selectedIndex = currentLanguage.ordinal,
+        onSelectedIndexChange = { index ->
+            AppSettings.updateLanguage(AppSettings.Language.entries[index])
+        },
+        modifier = MiuixDisplayRowHeight,
+        insideMargin = MiuixRowInsideMargin
+    )
 }
 
 @Composable
@@ -859,43 +878,20 @@ private fun ColorModeSetting(
     val currentMode = AppSettings.colorMode
     val localizedCtx = AppSettings.localizedContext(LocalContext.current)
 
-    val modeText = when (currentMode) {
-        AppSettings.ColorMode.SYSTEM -> stringResource(R.string.system_default)
-        AppSettings.ColorMode.LIGHT -> stringResource(R.string.always_light)
-        AppSettings.ColorMode.DARK -> stringResource(R.string.always_dark)
-    }
-    val systemText = localizedCtx.getString(R.string.system_default)
-    val lightText = localizedCtx.getString(R.string.always_light)
-    val darkText = localizedCtx.getString(R.string.always_dark)
-
-    SettingRow(
-        label = stringResource(R.string.color_mode),
-        value = modeText,
-        labelColor = labelColor,
-        valueColor = valueColor
-    ) { dismiss ->
-        DropdownMenuItem(
-            text = { Text(systemText) },
-            onClick = {
-                AppSettings.updateColorMode(AppSettings.ColorMode.SYSTEM)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(lightText) },
-            onClick = {
-                AppSettings.updateColorMode(AppSettings.ColorMode.LIGHT)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(darkText) },
-            onClick = {
-                AppSettings.updateColorMode(AppSettings.ColorMode.DARK)
-                dismiss()
-            }
-        )
-    }
+    SettingsDropdownPreference(
+        title = stringResource(R.string.color_mode),
+        items = listOf(
+            localizedCtx.getString(R.string.system_default),
+            localizedCtx.getString(R.string.always_light),
+            localizedCtx.getString(R.string.always_dark)
+        ),
+        selectedIndex = currentMode.ordinal,
+        onSelectedIndexChange = { index ->
+            AppSettings.updateColorMode(AppSettings.ColorMode.entries[index])
+        },
+        modifier = MiuixDisplayRowHeight,
+        insideMargin = MiuixRowInsideMargin
+    )
 }
 
 @Composable
@@ -906,34 +902,19 @@ private fun ChartScaleModeSetting(
     val currentMode = AppSettings.chartScaleMode
     val localizedCtx = AppSettings.localizedContext(LocalContext.current)
 
-    val modeText = when (currentMode) {
-        AppSettings.ChartScaleMode.AUTO -> stringResource(R.string.chart_scale_auto)
-        AppSettings.ChartScaleMode.FULL_RANGE -> stringResource(R.string.chart_scale_full_range)
-    }
-    val autoText = localizedCtx.getString(R.string.chart_scale_auto)
-    val fullRangeText = localizedCtx.getString(R.string.chart_scale_full_range)
-
-    SettingRow(
-        label = stringResource(R.string.chart_scale_mode),
-        value = modeText,
-        labelColor = labelColor,
-        valueColor = valueColor
-    ) { dismiss ->
-        DropdownMenuItem(
-            text = { Text(autoText) },
-            onClick = {
-                AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.AUTO)
-                dismiss()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(fullRangeText) },
-            onClick = {
-                AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.FULL_RANGE)
-                dismiss()
-            }
-        )
-    }
+    SettingsDropdownPreference(
+        title = stringResource(R.string.chart_scale_mode),
+        items = listOf(
+            localizedCtx.getString(R.string.chart_scale_auto),
+            localizedCtx.getString(R.string.chart_scale_full_range)
+        ),
+        selectedIndex = currentMode.ordinal,
+        onSelectedIndexChange = { index ->
+            AppSettings.updateChartScaleMode(AppSettings.ChartScaleMode.entries[index])
+        },
+        modifier = MiuixDisplayRowHeight,
+        insideMargin = MiuixRowInsideMargin
+    )
 }
 
 @Composable
@@ -945,10 +926,35 @@ private fun NotificationSetting(
     val context = LocalContext.current
     val enabled = AppSettings.notificationEnabled
 
+    // Shared toggle target: the row click and the switch itself both funnel
+    // through here, so pressing anywhere on the line behaves the same
+    // (permission ask on turn-on, service teardown on turn-off).
+    val toggleNotification: (Boolean) -> Unit = { turnOn ->
+        if (turnOn) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED
+            ) {
+                AppSettings.updateNotificationEnabled(true)
+            } else {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            AppSettings.updateNotificationEnabled(false)
+            IslandHelper.cancelNotification(context)
+            // Without a notification the service has nothing to
+            // anchor on, and Android would swap in its own
+            // "app is running in background" notice instead.
+            RecordingForegroundService.stop(context)
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(34.dp),
+            .height(44.dp)
+            .clickable { toggleNotification(!enabled) }
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -957,42 +963,18 @@ private fun NotificationSetting(
             modifier = Modifier.width(130.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            val thumbOffset by animateDpAsState(if (enabled) 35.dp else 3.dp, label = "thumb")
-            Box(
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (enabled) valueColor else labelColor.copy(alpha = 0.3f))
-                    .clickable {
-                        if (!enabled) {
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                                    == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                AppSettings.updateNotificationEnabled(true)
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        } else {
-                            AppSettings.updateNotificationEnabled(false)
-                            IslandHelper.cancelNotification(context)
-                            // Without a notification the service has nothing to
-                            // anchor on, and Android would swap in its own
-                            // "app is running in background" notice instead.
-                            RecordingForegroundService.stop(context)
-                        }
-                    },
-                contentAlignment = Alignment.CenterStart
-            ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(start = thumbOffset)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(androidx.compose.ui.graphics.Color.White)
-                    )
-            }
+            MiuixSwitch(
+                checked = enabled,
+                onCheckedChange = toggleNotification,
+                colors = SwitchDefaults.switchColors(
+                    checkedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    uncheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    disabledCheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    disabledUncheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    checkedTrackColor = valueColor,
+                    uncheckedTrackColor = labelColor.copy(alpha = 0.3f)
+                )
+            )
         }
     }
 }
@@ -1004,10 +986,16 @@ private fun AutoConnectSetting(
 ) {
     val enabled = AppSettings.autoConnect
 
+    // miuix demo switch rows: the WHOLE line is the toggle target. Tapping
+    // the row flips the switch (the MiuixIndication highlight plays under
+    // the finger); tapping the switch itself still works — the switch
+    // consumes its own tap, so the row handler never double-fires.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(34.dp),
+            .height(44.dp)
+            .clickable { AppSettings.updateAutoConnect(!enabled) }
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1016,24 +1004,18 @@ private fun AutoConnectSetting(
             modifier = Modifier.width(130.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            val thumbOffset by animateDpAsState(if (enabled) 35.dp else 3.dp, label = "autoConnectThumb")
-            Box(
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (enabled) valueColor else labelColor.copy(alpha = 0.3f))
-                    .clickable { AppSettings.updateAutoConnect(!enabled) },
-                contentAlignment = Alignment.CenterStart
-            ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(start = thumbOffset)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(androidx.compose.ui.graphics.Color.White)
-                    )
-            }
+            MiuixSwitch(
+                checked = enabled,
+                onCheckedChange = { turnOn -> AppSettings.updateAutoConnect(turnOn) },
+                colors = SwitchDefaults.switchColors(
+                    checkedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    uncheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    disabledCheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    disabledUncheckedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    checkedTrackColor = valueColor,
+                    uncheckedTrackColor = labelColor.copy(alpha = 0.3f)
+                )
+            )
         }
     }
 }
@@ -1046,25 +1028,18 @@ private fun RecordingDurationLimitSetting(
     val currentLimit = AppSettings.recordingDurationLimitMin
     val limitCtx = AppSettings.localizedContext(LocalContext.current)
 
-    val limitText = String.format(limitCtx.getString(R.string.recording_duration_value), currentLimit)
-
-    SettingRow(
-        label = stringResource(R.string.recording_duration_limit),
-        value = limitText,
-        labelColor = labelColor,
-        valueColor = valueColor
-    ) { dismiss ->
-        AppSettings.RECORDING_DURATION_OPTIONS.forEach { minutes ->
-            val label = String.format(limitCtx.getString(R.string.recording_duration_value), minutes)
-            DropdownMenuItem(
-                text = { Text(label) },
-                onClick = {
-                    AppSettings.updateRecordingDurationLimit(minutes)
-                    dismiss()
-                }
-            )
-        }
-    }
+    SettingsDropdownPreference(
+        title = stringResource(R.string.recording_duration_limit),
+        items = AppSettings.RECORDING_DURATION_OPTIONS.map { minutes ->
+            String.format(limitCtx.getString(R.string.recording_duration_value), minutes)
+        },
+        selectedIndex = AppSettings.RECORDING_DURATION_OPTIONS.indexOf(currentLimit),
+        onSelectedIndexChange = { index ->
+            AppSettings.updateRecordingDurationLimit(AppSettings.RECORDING_DURATION_OPTIONS[index])
+        },
+        modifier = MiuixDisplayRowHeight,
+        insideMargin = MiuixRowInsideMargin
+    )
 }
 
 @Composable
@@ -1076,50 +1051,40 @@ private fun RangeSetting(
     val currentRange = AppSettings.range
     val rangeCtx = AppSettings.localizedContext(LocalContext.current)
 
-    val rangeText = when (currentRange) {
-        RangeMode.AUTO -> stringResource(R.string.range_auto)
-        RangeMode.LOW -> stringResource(R.string.range_low)
-        RangeMode.MID -> stringResource(R.string.range_mid)
-        RangeMode.HIGH -> stringResource(R.string.range_high)
-    }
-    val autoText = rangeCtx.getString(R.string.range_auto)
-    val lowText = rangeCtx.getString(R.string.range_low)
-    val midText = rangeCtx.getString(R.string.range_mid)
-    val highText = rangeCtx.getString(R.string.range_high)
-
-    SettingRow(
-        label = stringResource(R.string.range),
-        value = rangeText,
-        labelColor = labelColor,
-        valueColor = valueColor
-    ) { dismiss ->
-        RangeMode.entries.forEach { mode ->
-            val label = when (mode) {
-                RangeMode.AUTO -> autoText
-                RangeMode.LOW -> lowText
-                RangeMode.MID -> midText
-                RangeMode.HIGH -> highText
+    SettingsDropdownPreference(
+        title = stringResource(R.string.range),
+        items = RangeMode.entries.map { mode ->
+            when (mode) {
+                RangeMode.AUTO -> rangeCtx.getString(R.string.range_auto)
+                RangeMode.LOW -> rangeCtx.getString(R.string.range_low)
+                RangeMode.MID -> rangeCtx.getString(R.string.range_mid)
+                RangeMode.HIGH -> rangeCtx.getString(R.string.range_high)
             }
-            DropdownMenuItem(
-                text = { Text(label) },
-                onClick = {
-                    AppSettings.updateRange(mode)
-                    onRangeChange(mode)
-                    dismiss()
-                }
-            )
-        }
-    }
+        },
+        selectedIndex = currentRange.ordinal,
+        onSelectedIndexChange = { index ->
+            val mode = RangeMode.entries[index]
+            AppSettings.updateRange(mode)
+            onRangeChange(mode)
+        },
+        modifier = MiuixDisplayRowHeight,
+        insideMargin = MiuixRowInsideMargin
+    )
 }
 
 @Composable
 fun CalibrationRow(label: String, value: Float, unit: String = "") {
     val labelColor = AppColors.buttonTextColor()
     val valueColor = AppColors.linkColor()
+    // Read-only readout, but styled like the miuix demo rows: pressable with
+    // the full-line MiuixIndication highlight; the empty onClick guarantees
+    // releasing does nothing.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp),
+            .height(44.dp)
+            .clickable(onClick = {})
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

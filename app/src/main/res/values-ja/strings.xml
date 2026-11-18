@@ -102,6 +102,10 @@
     <string name="back">戻る</string>
 
     <!-- Changelog entries. One array per release, read by ChangelogScreen. -->
+    <string-array name="changelog_2_2_2">
+        <item>ダークモードの表示を改善</item>
+        <item>miuixコンポーネントライブラリを導入</item>
+    </string-array>
     <string-array name="changelog_2_2_1">
         <item>バージョン情報ページに異常な灰色のオーバーレイが表示される問題を修正</item>
         <item>バージョン情報ページの表示を改善</item>
@@ -186,6 +190,7 @@
     <string name="github_nexio_schedule">NexioSchedule</string>
     <string name="github_liquid_glass">Android Liquid Glass</string>
     <string name="github_glasmio">Glasmio</string>
+    <string name="github_miuix">miuix</string>
     <string name="jrpg_thanks">大学生活を彩ったJRPGたち</string>
     <string name="and_also">そして</string>
     <string name="island_open_app">アプリを開く</string>

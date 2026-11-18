@@ -97,7 +97,8 @@ private data class ChangelogRelease(
 
 /** Newest first — the newest card sits at the top of the page. */
 private val changelogReleases = listOf(
-    ChangelogRelease("2.2.1", R.array.changelog_2_2_1, isLatest = true),
+    ChangelogRelease("2.2.2", R.array.changelog_2_2_2, isLatest = true),
+    ChangelogRelease("2.2.1", R.array.changelog_2_2_1),
     ChangelogRelease("2.2.0", R.array.changelog_2_2_0),
     ChangelogRelease("2.1.0", R.array.changelog_2_1_0),
     ChangelogRelease("2.0.3", R.array.changelog_2_0_3),

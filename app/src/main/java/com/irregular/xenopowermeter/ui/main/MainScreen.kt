@@ -128,17 +128,37 @@ private fun GlassPill(
     // A disabled pill drops its tint for the Material3 disabled-container
     // gray, so e.g. "record" without a device still reads as off — the old
     // FilledTonalButton look — instead of a pale but colored pill.
+    // In dark mode that gray (12% onSurface) sinks into the black page, and
+    // alpha-fading the dark teal makes it darker still (dark × transparent
+    // × black background). Darken instead: an OPAQUE tint stepped BELOW the
+    // enabled pills' colour, so the row reads bright → mid → dim while the
+    // disabled pill stays legible against the black page; the "off" state
+    // itself is carried by the dimmed content.
     // The red recording glass is blended upstream (RecordButton cross-fades
     // the tint), so the pill never hard-swaps between teal and red.
     val isRecordingPill = recording
-    val surfaceTint = if (enabled) tint
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val isDark = AppColors.isDarkTheme()
+    val surfaceTint = when {
+        enabled -> tint
+        isDark -> lerp(tint, Color.Black, 0.25f)
+        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    }
     // Deep surfaces take a stronger halo; on a pale one the same alpha clips
     // to outright white instead of reading as light. These pills are small,
     // so the pool runs hotter and tighter than the bar's — at the bar's
     // levels the light measured +5 brightness, invisible under a thumb.
     val haloPeak = if (surfaceTint.luminance() < 0.5f) 0.13f else 0.085f
-    val surface = remember(surfaceTint, haloPeak, isRecordingPill) {
+    // The glass node must see theme switches. Capturing surfaceTint in the
+    // remembered draw lambda froze the disabled pill at the previous theme's
+    // colour: composition updated (the label recoloured), the surface draw
+    // didn't — the recorded pill stayed dark-disabled on a light page after
+    // dark→light. So the draw reads a State instead: rememberUpdatedState
+    // keeps one identity forever, and a snapshot read inside the draw scope
+    // makes any colour change invalidate the layer itself. Rebuilding the
+    // modifier is then only needed when the rim highlight swaps.
+    val surfaceTintState = rememberUpdatedState(surfaceTint)
+    val haloPeakState = rememberUpdatedState(haloPeak)
+    val surface = remember(isRecordingPill) {
         Modifier.drawBackdrop(
             backdrop = emptyBackdrop(),
             shape = { RoundedCornerShape(50) },
@@ -147,17 +167,18 @@ private fun GlassPill(
             shadow = null,
             innerShadow = null,
             onDrawSurface = {
-                drawRect(surfaceTint)
+                drawRect(surfaceTintState.value)
             },
             onDrawFront = {
                 val progress = pressState.progress.value
                 if (progress > 0.001f) {
+                    val peak = haloPeakState.value
                     val center = pressState.finger.value
                     val radius = size.minDimension * 1.3f
                     drawCircle(
                         brush = Brush.radialGradient(
-                            0f to Color.White.copy(alpha = haloPeak * progress),
-                            0.5f to Color.White.copy(alpha = haloPeak * progress),
+                            0f to Color.White.copy(alpha = peak * progress),
+                            0.5f to Color.White.copy(alpha = peak * progress),
                             1f to Color.Transparent,
                             center = center,
                             radius = radius
@@ -171,33 +192,44 @@ private fun GlassPill(
         )
     }
     val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = modifier
-            // The scale wraps the glass too, so the pill grows as one piece.
-            .graphicsLayer {
-                val scale = 1f + 0.05f * pressState.progress.value
-                scaleX = scale
-                scaleY = scale
-            }
-            .then(surface)
-            // Disabled pills stay inert: no press tracking, no light.
-            .then(if (enabled) Modifier.barPressSource(pressState) else Modifier)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = onClick
+    // emptyBackdrop() gives the glass node no invalidation driver of its own:
+    // after the first draw the node never re-renders, so a theme switch that
+    // merely updates the draw lambda left the old colour baked in — the
+    // recorded pill stayed dark-disabled on a light page after dark→light,
+    // and near-black after light→dark (light's onSurface-12% over black).
+    // The nav bar survives because its backdrop churns constantly. Re-key
+    // the whole pill on the disabled-theme inputs so the node is torn down
+    // and redrawn fresh on a theme flip; the record cross-fade keeps the
+    // key stable so it still animates through modifier updates.
+    key(enabled, isDark) {
+        Box(
+            modifier = modifier
+                // The scale wraps the glass too, so the pill grows as one piece.
+                .graphicsLayer {
+                    val scale = 1f + 0.05f * pressState.progress.value
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .then(surface)
+                // Disabled pills stay inert: no press tracking, no light.
+                .then(if (enabled) Modifier.barPressSource(pressState) else Modifier)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onClick
+                )
+                .defaultMinSize(minHeight = 40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .alpha(if (enabled) 1f else 0.45f),
+                verticalAlignment = Alignment.CenterVertically,
+                content = content
             )
-            .defaultMinSize(minHeight = 40.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .alpha(if (enabled) 1f else 0.45f),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+        }
     }
 }
 

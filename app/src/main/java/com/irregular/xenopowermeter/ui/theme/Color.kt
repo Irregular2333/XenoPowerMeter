@@ -55,6 +55,10 @@ private val DarkSettingsButtonColor = Color(0xFF2A6A6E)
 private val DarkSettingsButtonTextColor = Color(0xFFE0F5F7)
 
 object AppColors {
+    /** True when the app is currently rendering its dark palette. */
+    @Composable
+    fun isDarkTheme(): Boolean = isDark
+
     @Composable
     fun voltageColor() = if (isDark) DarkVoltageColor else LightVoltageColor
 

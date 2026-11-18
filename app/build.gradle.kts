@@ -14,14 +14,20 @@ kotlin {
 
 android {
     namespace = "com.irregular.xenopowermeter"
-    compileSdk = 37
+    // 37.2（次版本 API）：miuix 源码构建以 37.2 编译，AAR 元数据要求宿主 ≥ 37.2
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
 
     defaultConfig {
         applicationId = "com.irregular.xenopowermeter"
-        minSdk = 24
+        // miuix-blur（玻璃模糊）要求 minSdk 33（Android 13+），升级前为 24
+        minSdk = 33
         targetSdk = 36
-        versionCode = 2002001
-        versionName = "2.2.1"
+        versionCode = 2002002
+        versionName = "2.2.2"
 
         // Bake the build date into the APK at compile time (zip entry
         // timestamps are normalized by the toolchain, so the About page
@@ -78,6 +84,12 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    // miuix 0.9.5-beta01 起 glass/blur 模块已发布到 Maven Central，
+    // 与 main 分支源码（本地曾用 includeBuild 构建）API 一致。
+    implementation("top.yukonga.miuix.kmp:miuix-ui:0.9.5-beta01")
+    implementation("top.yukonga.miuix.kmp:miuix-preference:0.9.5-beta01")
+    implementation("top.yukonga.miuix.kmp:miuix-glass:0.9.5-beta01")
+    implementation("top.yukonga.miuix.kmp:miuix-blur:0.9.5-beta01")
 
     // Shapes (required by backdrop)
 

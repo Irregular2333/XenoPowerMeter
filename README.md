@@ -14,7 +14,7 @@
 ## 支持功能
 - 采集并记录电流、电压、功率等数据
 - 导出已采集的数据，支持与PC版客户端互通
-- 调整量程，读取设备的量程参数
+- 读取设备的量程参数
 - 适配小米Hyper OS超级岛(需解除超级岛白名单)
 - 支持多语言，已适配中日英三语
 
@@ -40,63 +40,68 @@
 
 ```
 app/src/main/java/com/irregular/xenopowermeter/
-├── MainActivity.kt                     // 应用入口
-├── AppSettings.kt                      // 应用设置
-├── ui/
-│   ├── BottomInset.kt                  // 底栏/侧边导轨尺寸常量
-│   ├── LiquidBar.kt                    // 液态底栏组件
-│   ├── GlassRim.kt                     // 玻璃边缘高光/描边样式
-│   ├── ProgressiveBlur.kt              // 渐进模糊
-│   ├── BouncyOverscroll.kt             // 弹性回弹效果
-│   ├── TabletLayout.kt                 // 平板设备判断与横竖屏布局切换
+├── MainActivity.kt                       // 应用入口
+├── AppSettings.kt                        // 应用设置
+├── ui/ 
+│   ├── BottomInset.kt                    // 底栏/侧边导轨尺寸常量
+│   ├── LiquidBar.kt                      // 液态底栏组件
+│   ├── GlassRim.kt                       // 玻璃边缘高光/描边样式
+│   ├── ProgressiveBlur.kt                // 渐进模糊
+│   ├── BouncyOverscroll.kt               // 弹性回弹效果
+│   ├── TabletLayout.kt                   // 平板设备判断与横竖屏布局切换
 │   ├── main/
-│   │   ├── MainScreen.kt               // 主界面(波形图表/测量数据/网格渲染)
-│   │   └── ChartAxis.kt                // 图表坐标轴(刻度计算与轴标签绘制)
+│   │   ├── MainScreen.kt                 // 主界面(波形图表/测量数据/网格渲染)
+│   │   └── ChartAxis.kt                  // 图表坐标轴(刻度计算与轴标签绘制)
 │   ├── settings/
-│   │   └── SettingsScreen.kt           // 设置页(采样/校准/显示项配置)
+│   │   ├── SettingsScreen.kt             // 设置页(采样/校准/显示项配置)
+│   │   ├── SettingsDropdownPreference.kt // miuix组件库
+│   │   └── SettingsMiuixTheme.kt         // 桥接配色方案
 │   ├── about/
-│   │   ├── AboutScreen.kt              // 关于页
-│   │   └── ChangelogScreen.kt          // 更新日志
+│   │   ├── AboutScreen.kt                // 关于页
+│   │   └── ChangelogScreen.kt            // 更新日志
 │   ├── navigation/
-│   │   └── Navigation.kt               // 底栏页面定义
+│   │   └── Navigation.kt                 // 底栏页面定义
 │   └── theme/
-│       ├── Theme.kt                    // Material3主题配置
-│       └── Color.kt                    // 自定义颜色定义
+│       ├── Theme.kt                      // Material3主题配置
+│       └── Color.kt                      // 自定义颜色定义
 ├── viewmodel/
-│   ├── WaveformViewModel.kt            // 核心:数据采集/波形图表/状态管理
-│   ├── PowerStatistics.kt              // 功率统计
-│   ├── WaveformPoint.kt                // 波形数据点模型
-│   ├── WaveformTimeline.kt             // 波形时间轴
-│   ├── WaveformDownsampler.kt          // 波形降采样
-│   └── WaveformStartupGate.kt          // 波形显示启动门控
+│   ├── WaveformViewModel.kt              // 核心:数据采集/波形图表/状态管理
+│   ├── PowerStatistics.kt                // 功率统计
+│   ├── WaveformPoint.kt                  // 波形数据点模型
+│   ├── WaveformTimeline.kt               // 波形时间轴
+│   ├── WaveformDownsampler.kt            // 波形降采样
+│   └── WaveformStartupGate.kt            // 波形显示启动门控
 ├── data/
 │   ├── model/
-│   │   ├── UsbAdcPacket.kt             // USB数据包模型
-│   │   ├── Commands.kt                 // MCU通信协议指令
-│   │   └── Calibration.kt              // 校准参数模型
+│   │   ├── UsbAdcPacket.kt               // USB数据包模型
+│   │   ├── Commands.kt                   // MCU通信协议指令
+│   │   └── Calibration.kt                // 校准参数模型
 │   ├── usb/
-│   │   ├── UsbCdcManager.kt            // USB CDC虚拟串口管理
-│   │   ├── FrameDemuxer.kt             // 字节流分帧器(ADC包/响应帧)
-│   │   ├── Crc16.kt                    // CRC16-CCITT校验
-│   │   └── ProtocolParser.kt           // 协议解析器(采样换算/数据流分发)
+│   │   ├── UsbCdcManager.kt              // USB CDC虚拟串口管理
+│   │   ├── FrameDemuxer.kt               // 字节流分帧器(ADC包/响应帧)
+│   │   ├── Crc16.kt                      // CRC16-CCITT校验
+│   │   └── ProtocolParser.kt             // 协议解析器(采样换算/数据流分发)
 │   └── converter/
-│       └── DataConverter.kt            // 数据格式化(电压/电流/功率显示)
+│       └── DataConverter.kt              // 数据格式化(电压/电流/功率显示)
 ├── recording/
-│   └── Recorder.kt                     // 录制管理(流式落盘+.bin/.csv导出)
-├── notification/
-│   ├── IslandHelper.kt                 // 通知通道管理+小米HyperOS超级岛适配
-│   └── RecordingForegroundService.kt   // 录制期前台服务(进程保活,复用实时通知)
+│   └── Recorder.kt                       // 录制管理(流式落盘+.bin/.csv导出)
+├── notification/ 
+│   ├── IslandHelper.kt                   // 通知通道管理+小米HyperOS超级岛适配
+│   └── RecordingForegroundService.kt     // 录制期前台服务
 └── (单元测试 app/src/test/)
-    ├── data/usb/                       // Crc16/UsbAdcPacket/FrameDemuxer/ProtocolParser
-    ├── data/model/                     // Calibration
-    ├── data/converter/                 // DataConverter
-    └── viewmodel/                      // Recorder/WaveformDownsampler/WaveformTimeline等
+    ├── data/usb/                       
+    ├── data/model/                     
+    ├── data/converter/                 
+    ├── recording/                      
+    ├── ui/main/                        
+    └── viewmodel/                     
 ```
 
 ## 特别感谢：
 - [《异度神剑X 终极版 NS2版》](https://www.nintendo.com/zh-hans-hk/games/switch2/bas6a/index.html)
+- [Github - miuix](https://github.com/compose-miuix-ui/miuix)
+- [Github - Glasmio](https://github.com/NEORUAA/Glasmio)
 - [Github - Power-Pico](https://github.com/No-Chicken/Power-Pico)
 - [Github - NexioSchedule](https://github.com/HaoZai000/NexioSchedule)
 - [Github - Android Liquid Glass](https://github.com/Kyant0/AndroidLiquidGlass)
-- [Github - Glasmio](https://github.com/NEORUAA/Glasmio)
 - 以及陪伴我大学生活的JPRG们
